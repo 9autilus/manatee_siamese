@@ -16,33 +16,36 @@ train_dir = '/media/disk2/govind/work/dataset/manatee/sketches'
 #test_dir  = '/media/disk2/govind/work/dataset/manatee/test_set'
 ht = 64
 wd = 128
-nb_epoch = 2#20
-
-def euclidean_distance(vects):
-    x, y = vects
-    return K.sqrt(K.sum(K.square(x - y), axis=1, keepdims=True))
+nb_epoch = 200 #20
 
 def get_sketch(sketch_path):
     sketch = cv2.imread(sketch_path)
     if sketch is not None:
         sketch = cv2.cvtColor(sketch, cv2.COLOR_BGR2GRAY)
         sketch = cv2.resize(sketch, (wd, ht))
-        sketch = (sketch/255.).astype('float32')
+        #inverting sketch for a black background
+        sketch = (255 - sketch).astype('float32') 
+        # Zero mean and Unit variance
+        sketch = (sketch - sketch.mean())/sketch.var()
+        return sketch
     else:
-        print('Unable to open ', sketch_path)
-        return np.zeros([ht, wd]).astype('float32')    
+        print('Unable to open ', sketch_path, ' Skipping.')
+        return None
     
 def load_training_data():
-    #train_sketch_names = ['U041.tif', 'U065.jpg','U232.tif', 'U310.jpg']
     train_sketch_names = os.listdir(train_dir)
+    train_sketch_names = train_sketch_names[-100:]
     
     print('Reading training data..')
     y_train = [x.split('.')[0] for x in train_sketch_names] # sketch names w/o extension
     X_train = np.empty([len(train_sketch_names), ht, wd], dtype='float32')
     for idx, sketch_name in enumerate(train_sketch_names):
         print(('\r{0:d}/{1:d} '.format(idx+1, len(train_sketch_names))), end='')
-        X_train[idx] = get_sketch(os.path.join(train_dir, sketch_name))
+        sketch = get_sketch(os.path.join(train_dir, sketch_name))
+        if sketch is not None:
+            X_train[idx] = sketch
     print('Done.')
+    
     X_train = X_train.reshape((X_train.shape[0], 1, X_train.shape[1], X_train.shape[2]))
     return X_train, y_train
     
@@ -68,13 +71,24 @@ def create_pairs(x):
     # second pair = diferent sketches
     num_sample = x.shape[0]
     for idx, sample in enumerate(x):
+        #Add first pair
         pairs += [[sample, sample]]
+        unusable_idx = [idx]
         rand_idx = idx
-        while rand_idx == idx:
+        
+        # Add second pair
+        while rand_idx in unusable_idx:
             rand_idx = random.randrange(1, num_sample)
+        unusable_idx += [rand_idx]    
         pairs += [[sample, x[rand_idx]]]
         
-        labels += [1, 0]
+        # Add third pair
+        while rand_idx in unusable_idx:
+            rand_idx = random.randrange(1, num_sample)
+        unusable_idx += [rand_idx]    
+        pairs += [[x[rand_idx], sample]]
+        
+        labels += [1, 0, 0]
     return np.array(pairs), np.array(labels)    
 
 def get_abs_diff( vects ):
@@ -112,7 +126,6 @@ if __name__ == '__main__':
     input_dim = (1, X_train.shape[2], X_train.shape[3])
 
     # create training+test positive and negative pairs
-    #digit_indices = [np.where(y_train == i)[0] for i in range(10)]
     tr_pairs, tr_y = create_pairs(X_train)
 
     # network definition
@@ -133,7 +146,7 @@ if __name__ == '__main__':
 
     # train
     rms = RMSprop()
-    model.compile(loss='binary_crossentropy', optimizer=rms)
+    model.compile(loss='binary_crossentropy', optimizer=rms, metrics=['accuracy'])
     model.fit([tr_pairs[:, 0], tr_pairs[:, 1]], tr_y,
               batch_size=128,
               nb_epoch=nb_epoch)
@@ -143,3 +156,5 @@ if __name__ == '__main__':
     tr_acc = compute_accuracy(pred, tr_y)
 
     print('* Accuracy on training set: %0.2f%%' % (100 * tr_acc))
+    
+    
