@@ -11,9 +11,10 @@ from keras.optimizers import RMSprop
 from keras import backend as K
 import cv2
 import argparse
+import sys # for flushing to stdout
 
-train_dir = '/media/disk2/govind/work/dataset/manatee/sketches'
-#test_dir  = '/media/disk2/govind/work/dataset/manatee/test_set'
+train_dir = '/home/govind/work/dataset/manatee/sketches'
+#test_dir  = '/home/govind/work/dataset/manatee/test_set'
 ht = 64
 wd = 128
 nb_epoch = 50
@@ -53,7 +54,7 @@ def get_sketch(sketch_path):
     
 def load_sketches():
     train_sketch_names = os.listdir(train_dir)
-    train_sketch_names = train_sketch_names[-75:]
+    train_sketch_names = train_sketch_names[-1000:]
     
     print('Reading sketches from disk...')
     y_train = [x.split('.')[0] for x in train_sketch_names] # sketch names w/o extension
@@ -125,33 +126,42 @@ def create_base_network(input_dim):
     seq.add(Dense(1, activation='sigmoid'))
     return seq
 
-def test_standard(model, tr_pairs, tr_y):
-    # compute final accuracy on training and test sets
-    pred = model.predict([tr_pairs[:, 0], tr_pairs[:, 1]])
-    tr_acc = compute_accuracy(pred, tr_y)
-    print('* Standard Accuracy on training set: %0.2f%%' % (100 * tr_acc))
-    
 def test_rank_based(model, X_train):
     print('Computing rank-based accuracy... ')
-    ranks = [1, 5, 10, 20]
-    accuracy = [0.] * len(ranks)
-
     num_samples = X_train.shape[0]
     num_pairs = (num_samples * (num_samples + 1)) / 2
-    pairs = np.empty([num_pairs, 2, X_train[0].shape]);
+
+    ranks = sorted([1, 6, 10, 20])
+    ranks = [rank for rank in ranks if rank <= num_samples] # filter bad ranks
+    accuracy = [0.] * len(ranks)
     
-    print('Formulating all possible pairs... ', end='')
-    pair_idx = 0
-    for i in range(num_samples):
+    size = 1
+    for i in [num_pairs, 2] + [i for i in X_train[0].shape]:
+        size *= i
+    
+    # To tackle memory constraints, process pairs in small sized batchs
+    batch_size = 128;    # Num pairs in a batch
+    scores = np.empty(num_pairs).astype('float32')         # List to store scores of ALL pairs
+    
+    pairs = np.empty([batch_size, 2] + [i for i in X_train[0].shape]);
+    pair_idx = 0; counter = 0;
+    for i in range(num_pairs):
         for j in range(i, num_samples):
             pairs[pair_idx] = np.array([[X_train[i], X_train[j]]])
             pair_idx += 1
-    print('Done.')
-    
-    print('Predicting... ', end='')
-    scores =  model.predict([pairs[:, 0], pairs[:, 1]]) 
-    print('Done.')
-    
+            
+            if (pair_idx == batch_size):
+                print('\r Predicting {0:d}/{1:d}'.format(counter, num_pairs), end=''); sys.stdout.flush()
+                batch_scores = model.predict([pairs[:, 0], pairs[:, 1]], batch_size=batch_size)
+                scores[counter:(counter+pair_idx)] = batch_scores[:, 0]
+                pair_idx = 0
+                counter += batch_size
+                
+    # Last remaining pairs which couldn't get processed in main loop
+    if pair_idx > 0:
+        batch_scores = model.predict([pairs[:pair_idx, 0], pairs[:pair_idx, 1]])
+        scores[counter:(counter+pair_idx)] = batch_scores[:, 0]
+        
     print('Analyzing scores... ', end='')
     score_table = np.zeros([num_samples, num_samples]).astype('float32')
     idx = 0
@@ -168,14 +178,14 @@ def test_rank_based(model, X_train):
     for r, rank in enumerate(ranks):
         num_found = 0
         for i in range(num_samples):
-            if i in sorted_idx[i][0:rank]:
+            if i in sorted_idx[i][-rank:]:
                 num_found += 1
         accuracy[r] = (100 * num_found)/float(num_samples)
         
     print('Rank based accuracy:')
     for i in range(len(ranks)):
-        print('Rank {0:3d} : {1:2.2f}%'.format(ranks[i], accuracy[i]))
-    
+        print('Top {0:3d} : {1:2.2f}%'.format(ranks[i], accuracy[i]))
+        
 def compute_accuracy(predictions, labels):
     '''Compute classification accuracy with a fixed threshold on distances.
     '''
@@ -222,7 +232,6 @@ if __name__ == '__main__':
         print('Reading weights from disk: ', args.weights)
         model.load_weights(args.weights)
         
-    test_standard(model, tr_pairs, tr_y)
     test_rank_based(model, X_train)
     
     
