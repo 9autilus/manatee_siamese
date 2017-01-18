@@ -8,30 +8,31 @@ import random
 from keras.models import Sequential, Model
 from keras.layers import Input, Convolution2D, MaxPooling2D, Dense, Flatten, Lambda
 from keras.optimizers import RMSprop
+from keras.callbacks import ModelCheckpoint
 from keras import backend as K
 import cv2
 import argparse
 import sys # for flushing to stdout
 
-train_dir = '/home/govind/work/dataset/manatee/sketches'
-#test_dir  = '/home/govind/work/dataset/manatee/test_set'
+train_dir = '/home/govind/work/dataset/manatee/sketches_train'
+test_dir  = '/home/govind/work/dataset/manatee/sketches_test'
 ht = 64
 wd = 128
-nb_epoch = 50
+nb_epoch = 200
 default_store_model = 'model.h5'
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--phase", help="train/val")
+    parser.add_argument("--phase", help="train/test")
     parser.add_argument("--weights", help="specify existing weights")
     args = parser.parse_args()
     
     if not args.phase:
         parser.print_help()
-        parser.error('Must specify phase (train/val)')
-    elif args.phase not in ['train', 'val']:
+        parser.error('Must specify phase (train/test)')
+    elif args.phase not in ['train', 'test']:
         parser.print_help()
-        parser.error('phase must be (train/val)')
+        parser.error('phase must be (train/test)')
 
     if not args.weights:
         print('No weights specified. using default: ', default_store_model)
@@ -52,22 +53,40 @@ def get_sketch(sketch_path):
         print('Unable to open ', sketch_path, ' Skipping.')
         return None
     
-def load_sketches():
-    train_sketch_names = os.listdir(train_dir)
-    train_sketch_names = train_sketch_names[-1000:]
+def load_sketches(phase):
+    if phase == 'train':
+        sketch_dir = train_dir
+    else:
+        sketch_dir = test_dir
+
+    sketch_names = os.listdir(sketch_dir)
+    #sketch_names = sketch_names[-100:]
     
+    if phase == 'train':
+        if len(sketch_names) < 10:
+            print('Found only {0:d} sketches in the training directory: {1:s}'.\
+                format(len(sketch_names), sketch_dir),
+                'What are you trying to do? Aborting for now.')
+            exit(0)
+    else:
+        if len(sketch_names) < 2:
+            print('Found only {0:d} sketches in the test directory: {1:s}'.\
+                format(len(sketch_names), sketch_dir),
+                'What are you trying to do? Aborting for now.')
+            exit(0)    
+        
     print('Reading sketches from disk...')
-    y_train = [x.split('.')[0] for x in train_sketch_names] # sketch names w/o extension
-    X_train = np.empty([len(train_sketch_names), ht, wd], dtype='float32')
-    for idx, sketch_name in enumerate(train_sketch_names):
-        print(('\r{0:d}/{1:d} '.format(idx+1, len(train_sketch_names))), end='')
-        sketch = get_sketch(os.path.join(train_dir, sketch_name))
+    ID = [x.split('.')[0] for x in sketch_names] # sketch names w/o extension
+    X = np.empty([len(sketch_names), ht, wd], dtype='float32')
+    for idx, sketch_name in enumerate(sketch_names):
+        print(('\r{0:d}/{1:d} '.format(idx+1, len(sketch_names))), end='')
+        sketch = get_sketch(os.path.join(sketch_dir, sketch_name))
         if sketch is not None:
-            X_train[idx] = sketch
+            X[idx] = sketch
     print('Done.')
     
-    X_train = X_train.reshape((X_train.shape[0], 1, X_train.shape[1], X_train.shape[2]))
-    return X_train, y_train
+    X = X.reshape((X.shape[0], 1, X.shape[1], X.shape[2]))
+    return X, ID
     
 def create_pairs(x):
     '''Positive and negative pair creation.
@@ -110,44 +129,63 @@ def eucl_dist_output_shape(shapes):
     shape1, shape2 = shapes
     return shape1 
     
-def create_base_network(input_dim):
+def create_network(input_dim):
     '''Base network to be shared (eq. to feature extraction).
     '''
-    seq = Sequential()
-    seq.add(Convolution2D(48, 10, 10, activation='relu', border_mode='valid', input_shape=input_dim))
-    seq.add(MaxPooling2D(pool_size=(2, 2), strides=None, border_mode='same'))
-    seq.add(Convolution2D(128, 7, 7, activation='relu', border_mode='valid'))
-    seq.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2), border_mode='same'))    
-    seq.add(Convolution2D(128, 4, 4, activation='relu', border_mode='valid'))
-    seq.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2), border_mode='same'))     
-    seq.add(Convolution2D(256, 4, 4, activation='relu', border_mode='valid'))
-    seq.add(Flatten())
-    seq.add(Dense(4096, activation='sigmoid'))
-    seq.add(Dense(1, activation='sigmoid'))
-    return seq
+    model = Sequential()
+    model.add(Convolution2D(48, 10, 10, activation='relu', border_mode='valid', input_shape=input_dim))
+    model.add(MaxPooling2D(pool_size=(2, 2), strides=None, border_mode='same'))
+    model.add(Convolution2D(128, 7, 7, activation='relu', border_mode='valid'))
+    model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2), border_mode='same'))    
+    model.add(Convolution2D(128, 4, 4, activation='relu', border_mode='valid'))
+    model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2), border_mode='same'))     
+    model.add(Convolution2D(256, 4, 4, activation='relu', border_mode='valid'))
+    model.add(Flatten())
+    model.add(Dense(4096, activation='sigmoid'))
+    model.add(Dense(1, activation='sigmoid'))
+    
+    
+    input_a = Input(shape=(input_dim))
+    input_b = Input(shape=(input_dim))
 
-def test_rank_based(model, X_train):
+    # because we re-use the same instance `model`,
+    # the weights of the network will be shared across the two branches
+    processed_a = model(input_a)
+    processed_b = model(input_b)
+
+    abs_diff = Lambda(get_abs_diff, output_shape = eucl_dist_output_shape)([processed_a, processed_b])
+    flattened_weighted_distance = Dense(1, activation = 'sigmoid')(abs_diff)
+
+    model = Model(input=[input_a, input_b], output = flattened_weighted_distance)     
+
+    # Optimizer
+    rms = RMSprop()
+    model.compile(loss='binary_crossentropy', optimizer=rms, metrics=['accuracy'])    
+    
+    return model
+
+def test_rank_based(model, X):
     print('Computing rank-based accuracy... ')
-    num_samples = X_train.shape[0]
+    num_samples = X.shape[0]
     num_pairs = (num_samples * (num_samples + 1)) / 2
 
-    ranks = sorted([1, 6, 10, 20])
+    ranks = sorted([1, 5, 10, 20])
     ranks = [rank for rank in ranks if rank <= num_samples] # filter bad ranks
     accuracy = [0.] * len(ranks)
     
     size = 1
-    for i in [num_pairs, 2] + [i for i in X_train[0].shape]:
+    for i in [num_pairs, 2] + [i for i in X[0].shape]:
         size *= i
     
     # To tackle memory constraints, process pairs in small sized batchs
     batch_size = 128;    # Num pairs in a batch
     scores = np.empty(num_pairs).astype('float32')         # List to store scores of ALL pairs
     
-    pairs = np.empty([batch_size, 2] + [i for i in X_train[0].shape]);
+    pairs = np.empty([batch_size, 2] + [i for i in X[0].shape]);
     pair_idx = 0; counter = 0;
     for i in range(num_pairs):
         for j in range(i, num_samples):
-            pairs[pair_idx] = np.array([[X_train[i], X_train[j]]])
+            pairs[pair_idx] = np.array([[X[i], X[j]]])
             pair_idx += 1
             
             if (pair_idx == batch_size):
@@ -186,52 +224,64 @@ def test_rank_based(model, X_train):
     for i in range(len(ranks)):
         print('Top {0:3d} : {1:2.2f}%'.format(ranks[i], accuracy[i]))
         
-def compute_accuracy(predictions, labels):
-    '''Compute classification accuracy with a fixed threshold on distances.
-    '''
-    return np.mean(labels == (predictions.ravel() > 0.5))
-
-if __name__ == '__main__':
-    args = parse_arguments()
-    
+   
+def train_net(args):
     # the data, shuffled and split between train and test sets
-    X_train, y_train = load_sketches()
+    X, ID = load_sketches(args.phase)
+    
+    # Divide between training and validation set
+    
+    num_sketches = X.shape[0]
+    num_sketches_val = (num_sketches * 30)/100
+    num_sketches_train = num_sketches - num_sketches_val
+    
+    X_train = X[:num_sketches_train]
+    X_val = X[num_sketches_train:]
+    
     input_dim = (1, X_train.shape[2], X_train.shape[3])
 
     # create training+test positive and negative pairs
     tr_pairs, tr_y = create_pairs(X_train)
+    val_pairs, val_y = create_pairs(X_val)
 
     # network definition
-    base_network = create_base_network(input_dim)
-    input_a = Input(shape=(input_dim))
-    input_b = Input(shape=(input_dim))
+    model = create_network(input_dim)    
 
-    # because we re-use the same instance `base_network`,
-    # the weights of the network will be shared across the two branches
-    processed_a = base_network(input_a)
-    processed_b = base_network(input_b)
+    # Create check point callback
+    checkpointer = ModelCheckpoint(filepath=args.weights, 
+        monitor='val_loss', verbose=1, save_best_only=True)
+    
+    # Train
+    model.fit([tr_pairs[:, 0], tr_pairs[:, 1]], tr_y,
+              batch_size=128,
+              nb_epoch=nb_epoch,
+              validation_data=([val_pairs[:, 0], val_pairs[:, 1]], val_y), 
+              callbacks=[checkpointer])
+    print('Trainig complete. Saved model as: ', args.weights)
+    #model.save_weights(args.weights) # Write learned weights on disk     
+    
+def test_net(args):
+    # the data, shuffled and split between train and test sets
+    X, ID = load_sketches(args.phase)
+    input_dim = (1, X.shape[2], X.shape[3])
 
-    abs_diff = Lambda(get_abs_diff, output_shape = eucl_dist_output_shape)([processed_a, processed_b])
-    flattened_weighted_distance = Dense(1, activation = 'sigmoid')(abs_diff)
+    # create training+test positive and negative pairs
+    sketch_pairs, y = create_pairs(X)
 
-    model = Model(input=[input_a, input_b], output = flattened_weighted_distance)     
+    # network definition
+    model = create_network(input_dim)
 
-    # Optimizer
-    rms = RMSprop()
-    model.compile(loss='binary_crossentropy', optimizer=rms, metrics=['accuracy'])
+    # Reuse pre-trained weights
+    print('Reading weights from disk: ', args.weights)
+    model.load_weights(args.weights)
+    test_rank_based(model, X)    
+    
+if __name__ == '__main__':
+    args = parse_arguments()
     
     if args.phase == 'train':
-        # Train
-        model.fit([tr_pairs[:, 0], tr_pairs[:, 1]], tr_y,
-                  batch_size=128,
-                  nb_epoch=nb_epoch)
-        print('Saving model as: ', args.weights)
-        model.save_weights(args.weights) # Write learned weights on disk    
+        train_net(args)
     else:
-        # Reuse pre-trained weights
-        print('Reading weights from disk: ', args.weights)
-        model.load_weights(args.weights)
-        
-    test_rank_based(model, X_train)
+        test_net(args)
     
     
