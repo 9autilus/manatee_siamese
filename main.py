@@ -19,16 +19,24 @@ random.seed(seed)
 train_dir = '/home/govind/work/dataset/manatee/sketches_train'
 test_dir  = '/home/govind/work/dataset/manatee/sketches_test'
 test2_dir  = '/home/govind/work/dataset/manatee/sketches2_test'
-ht = 64
-wd = 128
-nb_epoch = 200
+ht = 180
+wd = 360
 default_store_model = 'model.h5'
+
+# For debugging
+#np.set_printoptions(threshold='nan')
+train_dir = '/home/govind/work/dataset/manatee/sketches_test'
+test_dir  = '/home/govind/work/manatee/manatee_siamese/test_dataset/correct_matches'
+test2_dir  = '/home/govind/work/manatee/manatee_siamese/test_dataset/test2'
+
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("--phase", help="train/test")
-    parser.add_argument("--weights", help="specify existing weights")
+    parser.add_argument("--weights", help="weights to be stored/read")
     parser.add_argument("--test_mode", help="0:test vs test, 1: test vs train+test 2: test2 vs train+test")
+    parser.add_argument("--epochs", help="#epochs while training")
     args = parser.parse_args()
     
     if not args.phase:
@@ -36,12 +44,10 @@ def parse_arguments():
         parser.error('Must specify phase (train/test)')
     elif args.phase not in ['train', 'test']:
         parser.print_help()
-        parser.error('phase must be (train/test)')
-    
+        parser.error('phase must be (train/test)')  
     
     if args.phase == 'train':
-        if args.test_mode:
-            print('Ignoring test_mode parameter for training.')
+        args.epochs = int(args.epochs)
     else:
         args.test_mode = int(args.test_mode)
         if args.test_mode not in range(0,3):
@@ -177,14 +183,13 @@ def test_single_source(model, X, ID):
 
     ranks = sorted([1, 5, 10, 20])
     ranks = [rank for rank in ranks if rank <= num_samples] # filter bad ranks
-    accuracy = [0.] * len(ranks)
     
     size = 1
     for i in [num_pairs, 2] + [i for i in X[0].shape]:
         size *= i
     
     # To tackle memory constraints, process pairs in small sized batchs
-    batch_size = 128;    # Num pairs in a batch
+    batch_size = 32;    # Num pairs in a batch
     scores = np.empty(num_pairs).astype('float32')         # List to store scores of ALL pairs
     
     pairs = np.empty([batch_size, 2] + [i for i in X[0].shape]);
@@ -217,7 +222,7 @@ def test_single_source(model, X, ID):
     for i in range(num_samples):
         score_table[i][i] /= 2.
         
-    eval_score_table(score_table, ID, ID)
+    eval_score_table(score_table, ranks, ID, ID)
         
 def perform_testing(model, X1, ID1, X2=None, ID2=None):
     test_single_source = (X2 is None) or (X1 is None)
@@ -235,10 +240,9 @@ def perform_testing(model, X1, ID1, X2=None, ID2=None):
     
     ranks = sorted([1, 5, 10, 20])
     ranks = [rank for rank in ranks if rank <= num_cols] # filter bad ranks
-    accuracy = [0.] * len(ranks)          
     
     # To tackle memory constraints, process pairs in small sized batchs
-    batch_size = 128;    # Num pairs in a batch
+    batch_size = 32;    # Num pairs in a batch
     scores = np.empty(num_pairs).astype('float32') # List to store scores of ALL pairs     
     score_table = np.zeros([num_rows, num_cols]).astype('float32')
     
@@ -301,9 +305,9 @@ def perform_testing(model, X1, ID1, X2=None, ID2=None):
                 idx = idx + 1         
     
     # Parse score table and generate accuracy metrics
-    eval_score_table(score_table, ID1, ID2)        
+    eval_score_table(score_table, ranks, ID1, ID2)        
         
-def eval_score_table(score_table, row_IDs, col_IDs):  
+def eval_score_table(score_table, ranks, row_IDs, col_IDs):  
     row_IDs = np.array(row_IDs)
     col_IDs = np.array(col_IDs)
 
@@ -313,7 +317,6 @@ def eval_score_table(score_table, row_IDs, col_IDs):
     # verify score_table size against row_IDs and col_IDs
     #&&&
       
-    ranks = sorted([1, 5, 10, 20])
     # verify ranks agains score_table size 
     #ranks = [rank for rank in ranks if rank <= num_samples] # filter bad ranks
     accuracy = [0.] * len(ranks)    
@@ -332,6 +335,11 @@ def eval_score_table(score_table, row_IDs, col_IDs):
     for i in range(len(ranks)):
         print('Top {0:3d} : {1:2.2f}%'.format(ranks[i], accuracy[i]))
         
+    for i in range(num_row):
+        print(row_IDs[i], 'Scores ')
+        print(col_IDs[sorted_idx[i]])
+        print(score_table[i][sorted_idx[i]])
+        
 def train_net(args):
     # the data, shuffled and split between train and test sets
     X, ID = load_sketches(train_dir)
@@ -348,8 +356,10 @@ def train_net(args):
     input_dim = (1, X_train.shape[2], X_train.shape[3])
 
     # create training+test positive and negative pairs
+    print('Creating training pairs...')
     tr_pairs, tr_y = create_training_pairs(X_train)
     val_pairs, val_y = create_training_pairs(X_val)
+    print('Done')
 
     # network definition
     model = create_network(input_dim)    
@@ -359,13 +369,24 @@ def train_net(args):
         monitor='val_loss', verbose=1, save_best_only=True)
     
     # Train
+    print('Training started ...')
     model.fit([tr_pairs[:, 0], tr_pairs[:, 1]], tr_y,
               batch_size=128,
-              nb_epoch=nb_epoch,
+              nb_epoch=args.epochs,
               validation_data=([val_pairs[:, 0], val_pairs[:, 1]], val_y), 
               callbacks=[checkpointer])
     print('Trainig complete. Saved model as: ', args.weights)
-    #model.save_weights(args.weights) # Write learned weights on disk     
+    
+def debug_sketches(X1, X2, ht, wd) :
+    for i in range(X1.shape[0]):
+        print(np.min(X1[i]), np.mean(X1[i]), np.max(X1[i]))
+    
+    for i in range(X1.shape[0]):
+        sketch = X1[i].reshape(ht, wd)
+        sketch = sketch - np.min(sketch)
+        sketch = sketch * 255/np.max(sketch)
+        sketch = sketch.astype('uint8')
+        cv2.imwrite('test2' + str(i) + '.png', sketch)
     
 def test_net(args):
     input_dim = (1, ht, wd)
@@ -374,7 +395,7 @@ def test_net(args):
 
     # Reuse pre-trained weights
     print('Reading weights from disk: ', args.weights)
-    model.load_weights(args.weights)
+    #model.load_weights(args.weights)
     
     if args.test_mode == 0:
         X, ID = load_sketches(test_dir)
@@ -391,9 +412,11 @@ def test_net(args):
         X2_2, ID2_2 = load_sketches(test_dir)
         X2 = np.concatenate((X2_1, X2_2), axis=0);
         ID2 = np.concatenate((ID2_1, ID2_2), axis=0);
-        perform_testing(model, X1, ID1, X2, ID2)
-    
-    
+        print(X1.shape, X2_1.shape, X2_2.shape, X2.shape)
+
+    #debug_sketches(X1, X2, ht, wd)    
+    perform_testing(model, X1, ID1, X2, ID2)   
+        
 if __name__ == '__main__':
     args = parse_arguments()
     
