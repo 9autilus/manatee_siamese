@@ -1,17 +1,17 @@
 from __future__ import print_function
 from siamese_model import create_network
-from dataset import dataset
+from dataset import Dataset
 from keras.callbacks import ModelCheckpoint
 import numpy as np
 import random
 
 
 class SolverWrapper():
-    def __init__(self, imdb, weights, nb_epoch, input_dim, train_dir):
+    def __init__(self, imdb, weights, nb_epoch, train_dir):
         self.imdb = imdb
         self.weights_file = weights
         self.nb_epoch = nb_epoch
-        self.input_dim = input_dim
+        self.input_dim = self.imdb.get_input_dim()
         self.train_dir = train_dir
         
         # network definition

@@ -1,3 +1,6 @@
+from __future__ import print_function
+import numpy as np
+
 def eval_score_table(score_table, ranks, row_IDs, col_IDs):  
     row_IDs = np.array(row_IDs)
     col_IDs = np.array(col_IDs)
@@ -26,7 +29,7 @@ def eval_score_table(score_table, ranks, row_IDs, col_IDs):
     for i in range(len(ranks)):
         print('Top {0:3d} : {1:2.2f}%'.format(ranks[i], accuracy[i]))
         
-    for i in range(num_row):
-        print(row_IDs[i], 'Scores ')
-        print(col_IDs[sorted_idx[i]])
-        print(score_table[i][sorted_idx[i]])
+    #for i in range(num_row):
+    #    print(row_IDs[i], 'Scores ')
+    #    print(col_IDs[sorted_idx[i]])
+    #    print(score_table[i][sorted_idx[i]])

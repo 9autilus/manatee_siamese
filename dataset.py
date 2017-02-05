@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import random
 
-class dataset():
+class Dataset():
     def __init__(self, train_dir=None, test_dir=None, test2_dir=None):
         self.wd = 128#360
         self.ht = 64#180
@@ -37,7 +37,7 @@ class dataset():
 
         sketch_names = os.listdir(sketch_dir)
         random.shuffle(sketch_names) # Shuffle
-        sketch_names = sketch_names[-100:] # Enable for debugging purpose
+        #sketch_names = sketch_names[-100:] # Enable for debugging purpose
         
         if len(sketch_names) < 1:
             print('Found only {0:d} sketches in the sketch directory: {1:s}'.\
