@@ -9,11 +9,15 @@ def eval_score_table(score_table, ranks, row_IDs, col_IDs):
     num_row = row_IDs.shape[0]
 
     # verify score_table size against row_IDs and col_IDs
-    #&&&
+    if score_table.shape != (len(row_IDs), len(col_IDs)):
+        print('Score table size mismatch.', 
+            'Score table: ', score_table.shape,
+            '[row_IDs, col_IDs]:', (len(row_IDs), len(col_IDs)))
+        return
       
     # verify ranks agains score_table size 
     #ranks = [rank for rank in ranks if rank <= num_samples] # filter bad ranks
-    accuracy = [0.] * len(ranks)    
+    accuracy = [0.] * len(ranks)
       
     sorted_idx = np.argsort(score_table, axis=1)
   
