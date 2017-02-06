@@ -1,8 +1,14 @@
 #from __future__ import absolute_import
 from __future__ import print_function
+seed = 1337 # for reproducibility
+
 import os
 import numpy as np
+np.random.seed(seed)
 import random
+random.seed(seed)
+import tensorflow as tf
+tf.set_random_seed(42)
 from keras.models import Sequential, Model
 from keras.layers import Input, Convolution2D, MaxPooling2D, Dense, Flatten, Lambda
 from keras.optimizers import RMSprop
@@ -12,16 +18,11 @@ import cv2
 import argparse
 import sys # for flushing to stdout
 
-seed = 1337 # for reproducibility
-np.random.seed(seed)
-random.seed(seed)
-
-train_dir = '/home/govind/work/dataset/manatee/sketches_train'
-test_dir  = '/home/govind/work/dataset/manatee/sketches_test'
-test2_dir  = '/home/govind/work/dataset/manatee/sketches2_test'
-ht = 64
-wd = 128
-nb_epoch = 200
+train_dir = '/media/disk2/govind/work/dataset/manatee/sketches_train'
+test_dir  = '/media/disk2/govind/work/dataset/manatee/sketches_test'
+test2_dir = '/media/disk2/govind/work/dataset/manatee/sketches2_test'
+ht = 128
+wd = 256
 default_store_model = 'model.h5'
 
 def parse_arguments():
@@ -29,6 +30,7 @@ def parse_arguments():
     parser.add_argument("--phase", help="train/test")
     parser.add_argument("--weights", help="specify existing weights")
     parser.add_argument("--test_mode", help="0:test vs test, 1: test vs train+test 2: test2 vs train+test")
+    parser.add_argument("--epochs", help="#epochs while training")
     args = parser.parse_args()
     
     if not args.phase:
@@ -42,6 +44,7 @@ def parse_arguments():
     if args.phase == 'train':
         if args.test_mode:
             print('Ignoring test_mode parameter for training.')
+        args.epochs = int(args.epochs)
     else:
         args.test_mode = int(args.test_mode)
         if args.test_mode not in range(0,3):
@@ -67,6 +70,114 @@ def get_sketch(sketch_path):
         print('Unable to open ', sketch_path, ' Skipping.')
         return None
     
+    
+def attach_pairs(sketch_dir):
+    if not os.path.exists(sketch_dir):
+        print('The sketch directory {0:s} does not exist'.format(sketch_dir))
+        return None, None, None, None    
+    
+    sketch_names = os.listdir(sketch_dir)
+    random.shuffle(sketch_names) # Shuffle
+    
+    sketch_names = sketch_names[-100:] # Enable for debugging purpose
+    
+    # Divide between training and validation set
+    num_sketches_train = (len(sketch_names) * 70)/100
+    
+    train_sketches = sketch_names[:num_sketches_train]
+    val_sketches = sketch_names[num_sketches_train:]
+    
+    # Create training pairs
+    train_pairs = []
+    train_labels = [1, 0] * len(train_sketches)
+    for i, sketch_name in enumerate(train_sketches):
+        train_pairs.append([sketch_name, sketch_name])
+        
+        rand_idx = i
+        while rand_idx == i:
+            rand_idx = random.randrange(0, len(train_sketches))
+        train_pairs.append([sketch_name, train_sketches[rand_idx]])
+    
+    # Create validation pairs
+    val_pairs = []
+    val_labels = [1, 0] * len(val_sketches)
+    for sketch_name in val_sketches:
+        val_pairs.append([sketch_name, sketch_name])
+        
+        rand_idx = i
+        while rand_idx == i:
+            rand_idx = random.randrange(0, len(val_sketches))        
+        
+        val_pairs.append([sketch_name, val_sketches[rand_idx]])   
+    
+    return train_pairs, train_labels, val_pairs, val_labels
+    
+def get_train_batch(sketch_dir, pairs, labels, batch_size):
+    # batch size must be even number
+    if batch_size % 2 != 0:
+        print('Error: batch size must be an even number')
+        exit(0)
+    
+    X_l = np.zeros((batch_size, 1, ht, wd))
+    X_r = np.zeros((batch_size, 1, ht, wd))
+    y   = np.array([1, 0] * (batch_size/2))
+    
+    src_idx = 0
+    dst_idx = 0
+    while True:
+        sketch1_name = pairs[src_idx][0]
+        sketch2_name = pairs[src_idx + 1][1]
+        sketch1 = get_sketch(os.path.join(sketch_dir, sketch1_name))
+        sketch2 = get_sketch(os.path.join(sketch_dir, sketch2_name))
+    
+        X_l[dst_idx]     = sketch1.reshape(1, ht, wd)
+        X_r[dst_idx]     = sketch1.reshape(1, ht, wd)
+        X_l[dst_idx + 1] = sketch1.reshape(1, ht, wd)
+        X_r[dst_idx + 1] = sketch2.reshape(1, ht, wd)
+    
+        src_idx += 2
+        dst_idx += 2
+        
+        if src_idx >= len(pairs):
+            src_idx = 0
+        
+        if dst_idx >= batch_size:
+            dst_idx = 0
+            yield [X_l, X_r], y   
+            
+def get_val_batch(sketch_dir, pairs, labels, batch_size):
+    # batch size must be even number
+    if batch_size % 2 != 0:
+        print('Error: batch size must be an even number')
+        exit(0)
+    
+    X_l = np.zeros((batch_size, 1, ht, wd))
+    X_r = np.zeros((batch_size, 1, ht, wd))
+    y   = np.array([1, 0] * (batch_size/2))
+    
+    src_idx = 0
+    dst_idx = 0
+    while True:
+        sketch1_name = pairs[src_idx][0]
+        sketch2_name = pairs[src_idx + 1][1]
+        sketch1 = get_sketch(os.path.join(sketch_dir, sketch1_name))
+        sketch2 = get_sketch(os.path.join(sketch_dir, sketch2_name))
+    
+        X_l[dst_idx]     = sketch1.reshape(1, ht, wd)
+        X_r[dst_idx]     = sketch1.reshape(1, ht, wd)
+        X_l[dst_idx + 1] = sketch1.reshape(1, ht, wd)
+        X_r[dst_idx + 1] = sketch2.reshape(1, ht, wd)
+    
+        src_idx += 2
+        dst_idx += 2
+        
+        if src_idx >= len(pairs):
+            src_idx = 0
+        
+        if dst_idx >= batch_size:
+            dst_idx = 0
+            yield [X_l, X_r], y    
+    
 def load_sketches(sketch_dir):
     if not os.path.exists(sketch_dir):
         print('The sketch directory {0:s} does not exist'.format(sketch_dir))
@@ -74,7 +185,9 @@ def load_sketches(sketch_dir):
 
     sketch_names = os.listdir(sketch_dir)
     random.shuffle(sketch_names) # Shuffle
-    #sketch_names = sketch_names[-100:] # Enable for debugging purpose
+    
+    sketch_names = sketch_names[-100:] # Enable for debugging purpose
+    sketch_names = sketch_names[-10:] # Enable for debugging purpose
     
     if len(sketch_names) < 1:
         print('Found only {0:d} sketches in the sketch directory: {1:s}'.\
@@ -94,6 +207,32 @@ def load_sketches(sketch_dir):
     
     X = X.reshape((X.shape[0], 1, X.shape[1], X.shape[2]))
     return X, ID
+    
+def dump_sketch_pairs(sketch_dir, sketch_pairs, prefix):
+    num_pairs = len(sketch_pairs)
+    labels = np.zeros(num_pairs) # Won't be used
+    batch_size = 2
+    
+    print(sketch_pairs)
+    my_generator = get_train_batch(sketch_dir, sketch_pairs, labels, batch_size)
+    
+    for i in range(0, num_pairs, 2):
+        X, y = next(my_generator)
+    
+        sketch = np.concatenate((X[0][0], X[0][1]), axis=1)
+        sketch = sketch.reshape((2*ht, wd))
+        sketch = sketch - np.min(sketch) # bring lower limit to 0
+        sketch = sketch * (255. / np.max(sketch))
+        sketch = sketch.astype('uint8')
+        cv2.imwrite(prefix + str(i) + '_0.jpg', sketch)
+        
+        sketch = np.concatenate((X[1][0], X[1][1]), axis=1)
+        sketch = sketch.reshape((2*ht, wd))
+        sketch = sketch - np.min(sketch) # bring lower limit to 0
+        sketch = sketch * (255. / np.max(sketch))
+        sketch = sketch.astype('uint8')        
+        cv2.imwrite(prefix + str(i) + '_1.jpg', sketch)        
+
     
 def create_training_pairs(x):
     '''Positive and negative pair creation.
@@ -169,56 +308,7 @@ def create_network(input_dim):
     model.compile(loss='binary_crossentropy', optimizer=rms, metrics=['accuracy'])    
     
     return model
-
-def test_single_source(model, X, ID):
-    print('Computing rank-based accuracy... ')
-    num_samples = X.shape[0]
-    num_pairs = (num_samples * (num_samples + 1)) / 2
-
-    ranks = sorted([1, 5, 10, 20])
-    ranks = [rank for rank in ranks if rank <= num_samples] # filter bad ranks
-    accuracy = [0.] * len(ranks)
-    
-    size = 1
-    for i in [num_pairs, 2] + [i for i in X[0].shape]:
-        size *= i
-    
-    # To tackle memory constraints, process pairs in small sized batchs
-    batch_size = 128;    # Num pairs in a batch
-    scores = np.empty(num_pairs).astype('float32')         # List to store scores of ALL pairs
-    
-    pairs = np.empty([batch_size, 2] + [i for i in X[0].shape]);
-    pair_count = 0; counter = 0;
-    for i in range(num_pairs):
-        for j in range(i, num_samples):
-            pairs[pair_count] = np.array([[X[i], X[j]]])
-            pair_count += 1
-            
-            if (pair_count == batch_size):
-                print('\r Predicting {0:d}/{1:d}'.format(counter, num_pairs), end=''); sys.stdout.flush()
-                batch_scores = model.predict([pairs[:, 0], pairs[:, 1]], batch_size=batch_size)
-                scores[counter:(counter+pair_count)] = batch_scores[:, 0]
-                pair_count = 0
-                counter += batch_size
-                
-    # Last remaining pairs which couldn't get processed in main loop
-    if pair_count > 0:
-        batch_scores = model.predict([pairs[:pair_count, 0], pairs[:pair_count, 1]])
-        scores[counter:(counter+pair_count)] = batch_scores[:, 0]
-    
-    print('Analyzing scores... ', end='')
-    score_table = np.zeros([num_samples, num_samples]).astype('float32')
-    idx = 0
-    for i in range(num_samples):
-        for j in range(i, num_samples):
-            score_table[i, j] = scores[idx]
-            idx = idx + 1
-    score_table += np.transpose(score_table)
-    for i in range(num_samples):
-        score_table[i][i] /= 2.
-        
-    eval_score_table(score_table, ID, ID)
-        
+       
 def perform_testing(model, X1, ID1, X2=None, ID2=None):
     test_single_source = (X2 is None) or (X1 is None)
 
@@ -333,37 +423,38 @@ def eval_score_table(score_table, row_IDs, col_IDs):
         print('Top {0:3d} : {1:2.2f}%'.format(ranks[i], accuracy[i]))
         
 def train_net(args):
-    # the data, shuffled and split between train and test sets
-    X, ID = load_sketches(train_dir)
+    sketch_dir = train_dir
+    train_pairs, train_labels, val_pairs, val_labels = attach_pairs(sketch_dir)
+    #dump_sketch_pairs(sketch_dir, train_pairs, 'tr_')
+    #dump_sketch_pairs(sketch_dir, val_pairs, 'val_')
     
-    # Divide between training and validation set
+    num_pairs = len(train_pairs)
     
-    num_sketches = X.shape[0]
-    num_sketches_val = (num_sketches * 30)/100
-    num_sketches_train = num_sketches - num_sketches_val
-    
-    X_train = X[:num_sketches_train]
-    X_val = X[num_sketches_train:]
-    
-    input_dim = (1, X_train.shape[2], X_train.shape[3])
-
-    # create training+test positive and negative pairs
-    tr_pairs, tr_y = create_training_pairs(X_train)
-    val_pairs, val_y = create_training_pairs(X_val)
-
     # network definition
+    input_dim = (1, ht, wd)
     model = create_network(input_dim)    
 
     # Create check point callback
     checkpointer = ModelCheckpoint(filepath=args.weights, 
         monitor='val_loss', verbose=1, save_best_only=True)
+        
+    batch_size = 32
+    # Make samples_per_epoch a multiple of 32 to avoid warning:
+    # "Epoch comprised more than `samples_per_epoch` samples" during training
+    samples_per_epoch = 32 * np.ceil(num_pairs/32.)
     
     # Train
-    model.fit([tr_pairs[:, 0], tr_pairs[:, 1]], tr_y,
-              batch_size=128,
-              nb_epoch=nb_epoch,
-              validation_data=([val_pairs[:, 0], val_pairs[:, 1]], val_y), 
-              callbacks=[checkpointer])
+    model.fit_generator(get_train_batch(sketch_dir, train_pairs, train_labels, batch_size),
+        samples_per_epoch=samples_per_epoch,
+        nb_epoch=args.epochs,
+        validation_data=get_val_batch(sketch_dir, val_pairs, val_labels, batch_size),
+        nb_val_samples=len(val_pairs),
+        callbacks=[checkpointer])    
+    
+    #model.fit_generator(gen_train, samples_per_epoch=len(train_pairs),
+    #          nb_epoch=nb_epoch,
+    #          validation_data=([val_pairs[:, 0], val_pairs[:, 1]], val_y), 
+    #          callbacks=[checkpointer])
     print('Trainig complete. Saved model as: ', args.weights)
     #model.save_weights(args.weights) # Write learned weights on disk     
     
