@@ -79,7 +79,7 @@ def attach_pairs(sketch_dir):
     sketch_names = os.listdir(sketch_dir)
     random.shuffle(sketch_names) # Shuffle
     
-    sketch_names = sketch_names[-100:] # Enable for debugging purpose
+    #sketch_names = sketch_names[-100:] # Enable for debugging purpose
     
     # Divide between training and validation set
     num_sketches_train = (len(sketch_names) * 70)/100
@@ -186,8 +186,7 @@ def load_sketches(sketch_dir):
     sketch_names = os.listdir(sketch_dir)
     random.shuffle(sketch_names) # Shuffle
     
-    sketch_names = sketch_names[-100:] # Enable for debugging purpose
-    sketch_names = sketch_names[-10:] # Enable for debugging purpose
+    #sketch_names = sketch_names[-100:] # Enable for debugging purpose
     
     if len(sketch_names) < 1:
         print('Found only {0:d} sketches in the sketch directory: {1:s}'.\
@@ -233,7 +232,32 @@ def dump_sketch_pairs(sketch_dir, sketch_pairs, prefix):
         sketch = sketch.astype('uint8')        
         cv2.imwrite(prefix + str(i) + '_1.jpg', sketch)        
 
+
+def test_generators(sketch_dir, train_pairs, train_labels, val_pairs, val_labels, batch_size, num_train, num_val):
+    epsilon = 0.001;
+    num_train_batches = np.ceil(num_train/float(batch_size)).astype('int32')
+    num_val_batches = np.ceil(num_train/float(batch_size)).astype('int32')
     
+    gen = get_train_batch(sketch_dir, train_pairs, train_labels, batch_size)
+    
+    print('Testing training-set labels:')
+    compare_labels(gen, train_pairs, train_labels, num_train_batches, batch_size)
+    print('Testing validation-set labels:')
+    compare_labels(gen, val_pairs, val_labels, num_val_batches, batch_size)    
+    
+    
+def compare_labels(gen, pairs, labels, num_batches, batch_size):
+    num_matches = 0
+    for batch_id in range(num_batches):
+        [x_l, x_r], y = gen.next();
+        print('\rbatch_id: {0:d}/{1:d}'.format(batch_id, num_batches), end=''); sys.stdout.flush()
+        
+        for i in range(batch_size):
+            num_matches += (labels[i] == np.array_equal(x_l[i], x_r[i]))
+                
+    print('\nLabels match: {0:.1f}%'.format(100 * num_matches/float(num_batches*batch_size)))
+        
+        
 def create_training_pairs(x):
     '''Positive and negative pair creation.
     Alternates between positive and negative pairs.
@@ -428,8 +452,17 @@ def train_net(args):
     #dump_sketch_pairs(sketch_dir, train_pairs, 'tr_')
     #dump_sketch_pairs(sketch_dir, val_pairs, 'val_')
     
+    batch_size = 32
     num_pairs = len(train_pairs)
+    # Make samples_per_epoch a multiple of 32 to avoid warning:
+    # "Epoch comprised more than `samples_per_epoch` samples" during training
+    samples_per_epoch = 32 * np.ceil(num_pairs/32.)    
     
+    test_generators(sketch_dir, train_pairs, train_labels, val_pairs, val_labels, 
+        batch_size, samples_per_epoch, len(val_pairs))
+        
+    return
+
     # network definition
     input_dim = (1, ht, wd)
     model = create_network(input_dim)    
@@ -438,11 +471,6 @@ def train_net(args):
     checkpointer = ModelCheckpoint(filepath=args.weights, 
         monitor='val_loss', verbose=1, save_best_only=True)
         
-    batch_size = 32
-    # Make samples_per_epoch a multiple of 32 to avoid warning:
-    # "Epoch comprised more than `samples_per_epoch` samples" during training
-    samples_per_epoch = 32 * np.ceil(num_pairs/32.)
-    
     # Train
     model.fit_generator(get_train_batch(sketch_dir, train_pairs, train_labels, batch_size),
         samples_per_epoch=samples_per_epoch,
