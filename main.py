@@ -7,8 +7,8 @@ import numpy as np
 np.random.seed(seed)
 import random
 random.seed(seed)
-import tensorflow as tf
-tf.set_random_seed(42)
+#import tensorflow as tf
+#tf.set_random_seed(42)
 from keras.models import Sequential, Model
 from keras.layers import Input, Convolution2D, MaxPooling2D, Dense, Flatten, Lambda
 from keras.optimizers import RMSprop
@@ -232,9 +232,7 @@ def dump_sketch_pairs(sketch_dir, sketch_pairs, prefix):
         sketch = sketch.astype('uint8')        
         cv2.imwrite(prefix + str(i) + '_1.jpg', sketch)        
 
-
 def test_generators(sketch_dir, train_pairs, train_labels, val_pairs, val_labels, batch_size, num_train, num_val):
-    epsilon = 0.001;
     num_train_batches = np.ceil(num_train/float(batch_size)).astype('int32')
     num_val_batches = np.ceil(num_train/float(batch_size)).astype('int32')
     
@@ -245,7 +243,6 @@ def test_generators(sketch_dir, train_pairs, train_labels, val_pairs, val_labels
     print('Testing validation-set labels:')
     compare_labels(gen, val_pairs, val_labels, num_val_batches, batch_size)    
     
-    
 def compare_labels(gen, pairs, labels, num_batches, batch_size):
     num_matches = 0
     for batch_id in range(num_batches):
@@ -255,7 +252,16 @@ def compare_labels(gen, pairs, labels, num_batches, batch_size):
         for i in range(batch_size):
             num_matches += (labels[i] == np.array_equal(x_l[i], x_r[i]))
                 
-    print('\nLabels match: {0:.1f}%'.format(100 * num_matches/float(num_batches*batch_size)))
+    print('\nLabels match: {0:.1f}%'.format(100 * num_matches/float(num_batches*batch_size)))        
+        
+def validate_dataset(sketch_dir, train_pairs, train_labels, val_pairs, val_labels, 
+        batch_size, samples_train_set, samples_val_set):
+        
+    #dump_sketch_pairs(sketch_dir, train_pairs, 'tr_')
+    #dump_sketch_pairs(sketch_dir, val_pairs, 'val_')        
+        
+    test_generators(sketch_dir, train_pairs, train_labels, val_pairs, val_labels, 
+        batch_size, samples_train_set, samples_val_set)
         
         
 def create_training_pairs(x):
@@ -445,24 +451,39 @@ def eval_score_table(score_table, row_IDs, col_IDs):
     print('Rank based accuracy:')
     for i in range(len(ranks)):
         print('Top {0:3d} : {1:2.2f}%'.format(ranks[i], accuracy[i]))
+
+def dump_history(history, log_file_name):
+    f = open(log_file_name, "w")
+
+    train_acc = history['acc']
+    train_loss = history['loss']
+    val_acc = history['val_acc']
+    val_loss = history['val_loss']
+    
+    f.write('Epoch  Train_acc  Train_loss  Val_acc  Val_loss\n')
+    for i in range(len(train_acc)):
+        f.write('{0:d} {1:.2f}% {1:.2f} {1:.2f}% {1:.2f}\n'.format(
+            i, 100 * train_acc[i], train_loss[i], 100 * val_acc[i], val_loss[i]))
+            
+    print('Dumped history to file: {0:s}'.format(log_file_name))
         
 def train_net(args):
     sketch_dir = train_dir
     train_pairs, train_labels, val_pairs, val_labels = attach_pairs(sketch_dir)
-    #dump_sketch_pairs(sketch_dir, train_pairs, 'tr_')
-    #dump_sketch_pairs(sketch_dir, val_pairs, 'val_')
     
     batch_size = 32
     num_pairs = len(train_pairs)
-    # Make samples_per_epoch a multiple of 32 to avoid warning:
-    # "Epoch comprised more than `samples_per_epoch` samples" during training
-    samples_per_epoch = 32 * np.ceil(num_pairs/32.)    
+    # Make num_train_sample a multiple of 32 to avoid warning:
+    # "Epoch comprised more than `num_train_sample` samples" during training
+    num_train_sample = 32 * np.ceil(num_pairs/32.)  
+    num_val_sample = len(val_pairs)
     
-    test_generators(sketch_dir, train_pairs, train_labels, val_pairs, val_labels, 
-        batch_size, samples_per_epoch, len(val_pairs))
+    
+    num_train_sample = batch_size * 3; num_val_sample = batch_size * 1;   #for debugging
+    
+    #validate_dataset(sketch_dir, train_pairs, train_labels, val_pairs, val_labels, 
+    #    batch_size, num_train_sample, len(val_pairs))
         
-    return
-
     # network definition
     input_dim = (1, ht, wd)
     model = create_network(input_dim)    
@@ -472,12 +493,14 @@ def train_net(args):
         monitor='val_loss', verbose=1, save_best_only=True)
         
     # Train
-    model.fit_generator(get_train_batch(sketch_dir, train_pairs, train_labels, batch_size),
-        samples_per_epoch=samples_per_epoch,
+    hist = model.fit_generator(get_train_batch(sketch_dir, train_pairs, train_labels, batch_size),
+        samples_per_epoch=num_train_sample,
         nb_epoch=args.epochs,
         validation_data=get_val_batch(sketch_dir, val_pairs, val_labels, batch_size),
-        nb_val_samples=len(val_pairs),
+        nb_val_samples=num_val_sample,
         callbacks=[checkpointer])    
+        
+    dump_history(hist.history, 'history.log')
     
     #model.fit_generator(gen_train, samples_per_epoch=len(train_pairs),
     #          nb_epoch=nb_epoch,
