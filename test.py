@@ -23,7 +23,7 @@ class Test():
     def test_single_source(self, model, X, ID):
         print('Computing rank-based accuracy... ')
         num_samples = X.shape[0]
-        num_pairs = (num_samples * (num_samples + 1)) / 2
+        num_pairs = int((num_samples * (num_samples + 1)) / 2)
 
         ranks = [rank for rank in self.ranks if rank <= num_samples] # filter bad ranks
         accuracy = [0.] * len(ranks)
@@ -32,7 +32,7 @@ class Test():
         for i in [num_pairs, 2] + [i for i in X[0].shape]:
             size *= i
         
-        # To tackle memory constraints, process pairs in small sized batchs
+        # To tackle memory constraints, process pairs in small sized batches
         batch_size = 128;    # Num pairs in a batch
         scores = np.empty(num_pairs).astype('float32')         # List to store scores of ALL pairs
         
@@ -77,7 +77,7 @@ class Test():
         if test_single_source:
             X2 = X1; ID2 = ID1
             num_cols = num_rows
-            num_pairs = (num_rows * (num_rows + 1)) / 2
+            num_pairs = int((num_rows * (num_rows + 1)) / 2)
         else:
             num_cols = X2.shape[0]
             num_pairs = num_rows * num_cols
@@ -177,8 +177,8 @@ def test_net(train_dir, test_dir, test2_dir, test_mode, weights):
     if test_mode == 0:
         # test_dir vs test_dir
         X, ID = sw.imdb.load_sketches(test_dir)
-        sw.test_single_source(sw.net, X, ID)
-        #sw.perform_testing(sw.net, X, ID)
+        # sw.test_single_source(sw.net, X, ID)
+        sw.perform_testing(sw.net, X, ID)
     elif test_mode == 1:
         # test_dir vs (test_dir + train_dir)
         X1, ID1 = sw.imdb.load_sketches(test_dir)

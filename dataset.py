@@ -79,54 +79,24 @@ class Dataset():
 
         return train_pairs, train_labels, val_pairs, val_labels
 
-    def get_train_batch(self, batch_size):
+    def get_batch(self, batch_size, phase):
         # batch size must be even number
         if batch_size % 2 != 0:
             print('Error: batch size must be an even number')
             exit(0)
 
-        sketch_dir = self.train_dir
-        pairs = self.train_pairs
-        labels = self.train_labels
-        ht = self.ht
-        wd = self.wd
-
-        X_l = np.zeros((batch_size, 1, ht, wd))
-        X_r = np.zeros((batch_size, 1, ht, wd))
-        y = np.array([0, 1] * int(batch_size / 2))
-
-        src_idx = 0
-        dst_idx = 0
-        while True:
-            sketch1_name = pairs[src_idx][0]
-            sketch2_name = pairs[src_idx + 1][1]
-            sketch1 = self._get_sketch(os.path.join(sketch_dir, sketch1_name))
-            sketch2 = self._get_sketch(os.path.join(sketch_dir, sketch2_name))
-
-            X_l[dst_idx] = sketch1.reshape(1, ht, wd)
-            X_r[dst_idx] = sketch1.reshape(1, ht, wd)
-            X_l[dst_idx + 1] = sketch1.reshape(1, ht, wd)
-            X_r[dst_idx + 1] = sketch2.reshape(1, ht, wd)
-
-            src_idx += 2
-            dst_idx += 2
-
-            if src_idx >= len(pairs):
-                src_idx = 0
-
-            if dst_idx >= batch_size:
-                dst_idx = 0
-                yield [X_l, X_r], y
-
-    def get_val_batch(self, batch_size):
-        # batch size must be even number
-        if batch_size % 2 != 0:
-            print('Error: batch size must be an even number')
+        if phase == 'train':
+            sketch_dir = self.train_dir
+            pairs = self.train_pairs
+            labels = self.train_labels
+        elif phase == 'val':
+            sketch_dir = self.train_dir
+            pairs = self.val_pairs
+            labels = self.val_labels
+        else:
+            print('Error: get_batch() received weird "phase":{0:s}'.format(phase))
             exit(0)
 
-        sketch_dir = self.train_dir
-        pairs = self.val_pairs
-        labels = self.val_labels
         ht = self.ht
         wd = self.wd
 
