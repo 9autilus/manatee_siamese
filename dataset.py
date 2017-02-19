@@ -7,8 +7,8 @@ import random
 
 class Dataset():
     def __init__(self, train_dir=None, test_dir=None, test2_dir=None):
-        self.wd = 128 #256
-        self.ht = 64 #128
+        self.wd = 256
+        self.ht = 28
         self.train_dir = train_dir
         self.test_dir = test_dir
         self.test2_dir = test2_dir
