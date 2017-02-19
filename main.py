@@ -1,30 +1,31 @@
 from __future__ import print_function
 import os
-import numpy as np
-import random
 
+# Limit execution on certain GPU/GPUs
+gpu_id = '0'  # Comma seperated string of GPU IDs to be used e.g. '0, 1, 2, 3'
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
+
+seed = 1337  # for reproducibility
+import numpy as np
+np.random.seed(seed)        # Seed Numpy
+import random               # Seed random
+random.seed(seed)
+import tensorflow as tf
+tf.set_random_seed(seed)    # Seed Tensor Flow
 
 import argparse
-import sys # for flushing to stdout
-
 from train import train_net
 from test import test_net
 
-seed = 1337 # for reproducibility
-np.random.seed(seed)
-random.seed(seed)
-
-train_dir = '/home/govind/work/dataset/manatee/sketches_train'
-test_dir  = '/home/govind/work/dataset/manatee/sketches_test'
-test2_dir  = '/home/govind/work/dataset/manatee/sketches2_test'
+train_dir = 'path/to/sketches_train'
+test_dir  = 'path/to/sketches_test'
+test2_dir = 'path/to/sketches2_test'
 
 default_store_model = 'model.h5'
 
-# For debugging
+# For printing complete numpy assry while debugging
 #np.set_printoptions(threshold='nan')
-#train_dir = '/home/govind/work/manatee/manatee_siamese/test_dataset/wrong_matches'
-#test_dir  = '/home/govind/work/manatee/manatee_siamese/test_dataset/correct_matches'
-#test2_dir  = '/home/govind/work/manatee/manatee_siamese/test_dataset/test2'
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -42,6 +43,8 @@ def parse_arguments():
         parser.error('phase must be (train/test)')  
     
     if args.phase == 'train':
+        if args.test_mode:
+            print('Ignoring test_mode parameter for training.')
         args.epochs = int(args.epochs)
     else:
         args.test_mode = int(args.test_mode)

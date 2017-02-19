@@ -3,13 +3,15 @@ from keras.layers import Input, Convolution2D, MaxPooling2D, Dense, Flatten, Lam
 from keras.optimizers import RMSprop
 from keras import backend as K
 
-def get_abs_diff( vects ):
+def get_abs_diff(vects):
     x, y = vects
-    return K.abs( x - y )  
+    val = K.abs(x - y)
+    return val
 
-def eucl_dist_output_shape(shapes):
+
+def abs_diff_output_shape(shapes):
     shape1, shape2 = shapes
-    return shape1 
+    return (shape1)
 
 def create_network(input_dim):
     '''Base network to be shared (eq. to feature extraction).
@@ -24,8 +26,7 @@ def create_network(input_dim):
     model.add(Convolution2D(256, 4, 4, activation='relu', border_mode='valid'))
     model.add(Flatten())
     model.add(Dense(4096, activation='sigmoid'))
-    model.add(Dense(1, activation='sigmoid'))
-    
+
     input_a = Input(shape=(input_dim))
     input_b = Input(shape=(input_dim))
 
@@ -34,7 +35,7 @@ def create_network(input_dim):
     processed_a = model(input_a)
     processed_b = model(input_b)
 
-    abs_diff = Lambda(get_abs_diff, output_shape = eucl_dist_output_shape)([processed_a, processed_b])
+    abs_diff = Lambda(get_abs_diff, output_shape = abs_diff_output_shape)([processed_a, processed_b])
     flattened_weighted_distance = Dense(1, activation = 'sigmoid')(abs_diff)
 
     model = Model(input=[input_a, input_b], output = flattened_weighted_distance)     
