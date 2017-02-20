@@ -12,8 +12,12 @@ class Dataset():
         self.train_dir = train_dir
         self.test_dir = test_dir
         self.test2_dir = test2_dir
+        self.mean_image_name = "mean_image.png"
+        self.stddev_image_name = "stddev_image.png"
 
         self.train_pairs, self.train_labels, self.val_pairs, self.val_labels = self._attach_pairs(train_dir)
+
+        self.mean_image, self.stddev_image = self.get_mean_sketch()
 
     def get_input_dim(self):
         return (1, self.ht, self.wd)
@@ -23,15 +27,72 @@ class Dataset():
         if sketch is not None:
             sketch = cv2.cvtColor(sketch, cv2.COLOR_BGR2GRAY)
             sketch = cv2.resize(sketch, (self.wd, self.ht))
-            #inverting sketch for a black background
-            sketch = (255 - sketch).astype('float32') 
             # Zero mean and Unit variance
-            sketch = (sketch - sketch.mean())/sketch.var()
-            return sketch
+            sketch = (sketch - self.mean_image)/self.stddev_image
+            return sketch.astype('float32')
         else:
             print('Unable to open ', sketch_path, ' Skipping.')
             return None
 
+    '''
+    '''
+    def get_mean_sketch(self):
+        if os.path.exists(self.mean_image_name) and os.path.exists(self.stddev_image_name):
+            print('Reading mean image from disk: ', self.mean_image_name, self.stddev_image_name)
+            mean_matrix = cv2.imread(self.mean_image_name, cv2.IMREAD_GRAYSCALE)
+            stddev_matrix = cv2.imread(self.stddev_image_name, cv2.IMREAD_GRAYSCALE)
+            # Either use IMREAD_GRAYSCALE while reading or convert sketch to Gryyscale after opening
+            
+            if (mean_matrix is None) or (stddev_matrix is None):
+                print('Unable to open {0:s} or {1:s}'.format(self.mean_image_name, self.stddev_image_name))
+            return mean_matrix, stddev_matrix
+        
+        # Read all sketches and compute the mean and stddev matrices
+        print('Reading sketches from disk to compute mean images:')
+        
+        sketch_dir = self.train_dir
+        if not os.path.exists(sketch_dir):
+            print('The sketch directory {0:s} does not exist'.format(sketch_dir))
+            return None, None
+
+        sketch_names = os.listdir(sketch_dir)
+        if len(sketch_names) < 1:
+            print('Found only {0:d} sketches in the sketch directory: {1:s}'.\
+                format(len(sketch_names), sketch_dir),
+                'What are you trying to do? Aborting for now.')
+            exit(0)    
+            
+        print('Reading sketches from {0:s}'.format(sketch_dir))
+        
+        X = np.empty([len(sketch_names), self.ht, self.wd], dtype='float32')
+        idx = 0
+        for sketch_name in sketch_names:
+            print(('\r{0:d}/{1:d} '.format(idx+1, len(sketch_names))), end='')
+            
+            sketch_path = os.path.join(sketch_dir, sketch_name)
+            sketch = cv2.imread(sketch_path)
+            if sketch is not None:
+                sketch = cv2.cvtColor(sketch, cv2.COLOR_BGR2GRAY)
+                sketch = cv2.resize(sketch, (self.wd, self.ht))
+                X[idx] = sketch
+            else:
+                print('Unable to open ', sketch_path, 
+                ' Skipping in mean calculation. Mean image not reliable')
+            idx += 1
+        print('Done.')
+        
+        mean_matrix = np.mean(X, axis=0)
+        stddev_matrix = X.std(axis=0)
+        
+        # write to file for future usage
+        print('Writing mean images : {0:s} {1:s} to disk'.format(self.mean_image_name, self.stddev_image_name), end='')
+        cv2.imwrite(self.mean_image_name, mean_matrix.astype('uint8'))
+        cv2.imwrite(self.stddev_image_name, stddev_matrix.astype('uint8'))
+        print(' Done')
+        
+        return mean_matrix, stddev_matrix
+        
+            
     def get_num_train_sample(self):
         return 2 * len(self.train_pairs)
 
@@ -188,6 +249,11 @@ class Dataset():
 
         self._test_generators(batch_size, samples_train_set, samples_val_set)
 
+    '''
+    Load sketches from a direcctory. Return the data and IDs.
+    Used by the testing module.
+    May have to replace it if the test set becomes too large to fit in memory.
+    '''
     def load_sketches(self, sketch_dir):
         if not os.path.exists(sketch_dir):
             print('The sketch directory {0:s} does not exist'.format(sketch_dir))
@@ -215,3 +281,5 @@ class Dataset():
         
         X = X.reshape((X.shape[0], 1, X.shape[1], X.shape[2]))
         return X, ID
+        
+      

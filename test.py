@@ -90,6 +90,11 @@ class Test():
         score_table = np.zeros([num_rows, num_cols]).astype('float32')
         
         if test_single_source:
+            '''
+            Compares sketches from a single diectory to the sketches in the same directory.
+            We use this knowledge to avoid computation of permutations of a given pair. That 
+            is, each possible combination only passes once through network.
+            '''        
             pairs = np.empty([batch_size, 2] + [i for i in X1[0].shape]);
             pair_count = 0; counter = 0;
             for i in range(num_rows):
@@ -120,6 +125,10 @@ class Test():
             for i in range(num_rows):
                 score_table[i][i] /= 2.
         else:   
+            '''
+            No shortcuts about permutations are made. All sketches in X1 are compared with
+            all sketches in X2.
+            '''        
             pairs = np.empty([batch_size, 2] + [i for i in X1[0].shape]);
             pair_count = 0; counter = 0;
             for i in range(num_rows):
