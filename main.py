@@ -20,7 +20,6 @@ from test import test_net
 
 train_dir = 'path/to/sketches_train'
 test_dir  = 'path/to/sketches_test'
-test2_dir = 'path/to/sketches2_test'
 
 default_store_model = 'model.h5'
 
@@ -63,4 +62,4 @@ if __name__ == '__main__':
     if args.phase == 'train':
         train_net(train_dir, args.weights, args.epochs)
     else:
-        test_net(train_dir, test_dir, test2_dir, args.test_mode, args.weights)
+        test_net(train_dir, test_dir, args.test_mode, args.weights)

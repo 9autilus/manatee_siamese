@@ -8,12 +8,11 @@ from dataset import Dataset
 from eval import eval_score_table
 
 class Test():
-    def __init__(self, imdb, weights, train_dir, test_dir, test2_dir):
+    def __init__(self, imdb, weights, train_dir, test_dir):
         self.imdb = imdb
         self.weights_file = weights
         self.input_dim = self.imdb.get_input_dim()
         self.test_dir = test_dir
-        self.test2_dir = test2_dir
         self.ranks = sorted([1, 5, 10, 20])
         
         # network definition
@@ -175,10 +174,10 @@ def debug_sketches(X1, X2, ht, wd) :
         file_name = 'test2' + str(i) + '_' + str(wd) + 'x' + str(ht)+ '.png'
         cv2.imwrite(file_name, sketch)
     
-def test_net(train_dir, test_dir, test2_dir, test_mode, weights):
-    imdb = Dataset(train_dir=train_dir, test_dir=test_dir, test2_dir=test2_dir)
+def test_net(train_dir, test_dir, test_mode, weights):
+    imdb = Dataset(train_dir=train_dir, test_dir=test_dir)
 
-    sw = Test(imdb, weights, train_dir, test_dir, test2_dir)
+    sw = Test(imdb, weights, train_dir, test_dir)
     
     # Reuse pre-trained weights
     print('Reading weights from disk: ', weights)
@@ -189,22 +188,9 @@ def test_net(train_dir, test_dir, test2_dir, test_mode, weights):
         # sw.test_single_source(sw.net, X, ID)
         sw.perform_testing(sw.net, X, ID)
     elif test_mode == 1:
-        # test_dir vs (test_dir + train_dir)
+        # test2_dir vs (test_dir + train_dir)
         X1, ID1 = sw.imdb.load_sketches(test_dir)
         X2, ID2 = sw.imdb.load_sketches(train_dir)
-        X2 = np.concatenate((X1, X2), axis=0);
-        ID2 = np.concatenate((ID1, ID2), axis=0);
         sw.perform_testing(sw.net, X1, ID1, X2, ID2)
-    elif test_mode == 2:
-        # test2_dir vs (test_dir + train_dir)
-        X1, ID1 = sw.imdb.load_sketches(test2_dir)
-        X2_1, ID2_1 = sw.imdb.load_sketches(train_dir)
-        X2_2, ID2_2 = sw.imdb.load_sketches(test_dir)
-        X2 = np.concatenate((X2_1, X2_2), axis=0);
-        ID2 = np.concatenate((ID2_1, ID2_2), axis=0);
-        print(X1.shape, X2_1.shape, X2_2.shape, X2.shape)
-
-        #debug_sketches(X1, X2, sw.imdb.ht, sw.imdb.wd)    
-        sw.perform_testing(sw.net, X1, ID1, X2, ID2)  
 
     return
