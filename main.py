@@ -23,7 +23,7 @@ test_dir  = 'path/to/sketches_test'
 
 default_store_model = 'model.h5'
 
-# For printing complete numpy assry while debugging
+# For printing complete numpy array while debugging
 #np.set_printoptions(threshold='nan')
 
 def parse_arguments():

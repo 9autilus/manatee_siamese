@@ -81,7 +81,10 @@ class SolverWrapper():
         num_train_sample = batch_size * np.ceil(self.imdb.get_num_train_sample() / float(batch_size)).astype('int32')
         num_val_sample = batch_size * np.ceil(self.imdb.get_num_val_sample() / float(batch_size)).astype('int32')
 
-        # self.imdb.validate_dataset(self.batch_size, num_train_sample, num_val_sample)
+        # For debugging purpose
+        if 0:
+            self.imdb.validate_dataset(self.batch_size)
+            return # I would like to exit after printing debugging info
 
         # network definition
         input_dim = (1, self.imdb.ht, self.imdb.wd)
@@ -106,11 +109,31 @@ class SolverWrapper():
         print('Training complete. Saved model as: ', self.weights_file)
 
 
-def train_net(sketch_dir, weights, nb_epoch):
-    imdb = Dataset(train_dir=sketch_dir)
-    batch_size = 32
+def train_net(train_dir, weights, nb_epoch):
+    dataset_args = {}
+    dataset_args['wd'] = 128 #256
+    dataset_args['ht'] = 64 #128
+    dataset_args['train_dir'] = train_dir
+    dataset_args['test_dir'] = None
 
-    sw = SolverWrapper(imdb, weights, nb_epoch, batch_size, sketch_dir)
+    train_args = {}
+    train_args['batch_size'] = 32
+    train_args['use_augmentation'] = True
+    train_args['num_augmented_sketches'] = 1;
+    train_args['val_split'] = 30; # Percentage validation set
+    train_args['height_shift_range'] = 0.01 #fraction
+    train_args['width_shift_range'] = 0.01
+    train_args['rotation_range'] = 5.
+    train_args['shear_range'] = np.pi * 0.01
+    train_args['zoom_range'] = [0.95, 1.02]
+    train_args['fill_mode'] = 'nearest' # 'constant', 'nearest', 'reflect', 'wrap'
+    train_args['cval'] = 1 # Only used if fill_mode is 'constant'
+
+    # Open and initialize dataset for training
+    imdb = Dataset(dataset_args)
+    imdb.prep_training(train_args)
+
+    sw = SolverWrapper(imdb, weights, nb_epoch, train_args['batch_size'], train_dir)
 
     sw.train_model()
    

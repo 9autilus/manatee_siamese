@@ -175,7 +175,13 @@ def debug_sketches(X1, X2, ht, wd) :
         cv2.imwrite(file_name, sketch)
     
 def test_net(train_dir, test_dir, test_mode, weights):
-    imdb = Dataset(train_dir=train_dir, test_dir=test_dir)
+    dataset_args = {}
+    dataset_args['wd'] = 128
+    dataset_args['ht'] = 64
+    dataset_args['train_dir'] = train_dir
+    dataset_args['test_dir'] = test_dir
+
+    imdb = Dataset(dataset_args)
 
     sw = Test(imdb, weights, train_dir, test_dir)
     
