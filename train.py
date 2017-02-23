@@ -118,8 +118,11 @@ def train_net(train_dir, weights, nb_epoch):
 
     train_args = {}
     train_args['batch_size'] = 32
-    train_args['use_augmentation'] = True
-    train_args['num_augmented_sketches'] = 1;
+    
+    train_args['use_augmentation'] = False #True
+    # Params below only used if 'use_augmentation' is True
+    # Number of additionally augmented sketches per manatee
+    train_args['num_additional_sketches'] = 1; 
     train_args['val_split'] = 30; # Percentage validation set
     train_args['height_shift_range'] = 0.01 #fraction
     train_args['width_shift_range'] = 0.01

@@ -34,6 +34,8 @@ class Dataset():
 
         self.mean_image, self.stddev_image = self.get_mean_sketch()
 
+        self.ignore_list_file = os.path.join('resources', 'ignore_list.txt')
+
     def get_input_dim(self):
         return (1, self.ht, self.wd)
 
@@ -52,7 +54,7 @@ class Dataset():
     def prep_training(self, train_args):
         self.val_split = train_args['val_split']
         self.use_augmentation = train_args['use_augmentation']
-        self.num_augmented_sketches = train_args['num_augmented_sketches']
+        self.num_additional_sketches = train_args['num_additional_sketches']
         self.height_shift_range = train_args['height_shift_range']
         self.width_shift_range = train_args['width_shift_range']
         self.rotation_range = train_args['rotation_range']
@@ -62,10 +64,34 @@ class Dataset():
         self.cval = train_args['cval']
 
         if not self.use_augmentation:
-            self.num_augmented_sketches = 1
+            self.num_additional_sketches = 0
 
-        self.train_pairs, self.train_labels, self.val_pairs, \
-                self.val_labels = self._attach_pairs()
+        self.sketch_list = self._get_sketch_list()
+
+        self.train_pairs, \
+        self.train_labels, \
+        self.val_pairs, \
+        self.val_labels = self._attach_pairs()
+
+        return
+
+    def _get_sketch_list(self):
+        sketch_list = os.listdir(self.train_dir)
+        if len(sketch_list) < 1:
+            print('Found only {0:d} sketches in the sketch directory: {1:s}'.\
+                format(len(sketch_list), self.train_dir),
+                'What are you trying to do? Aborting for now.')
+            exit(0)
+
+        # Get list of sketches to ignore
+        ignore_list = open(self.ignore_list_file, 'r').read().splitlines()
+        ignore_list = [i for i in ignore_list if i.isspace() is False and i.startswith('#') is False]
+        # Remove the sketches that are present in ignore_list
+        sketch_list = [i for i in sketch_list if i not in ignore_list]
+        # Shuffle the list
+        random.shuffle(sketch_list)
+        return sketch_list
+
     '''
     '''
     def get_mean_sketch(self):
@@ -80,28 +106,14 @@ class Dataset():
             return mean_matrix, stddev_matrix
         
         # Read all sketches and compute the mean and stddev matrices
-        print('Reading sketches from disk to compute mean images:')
-        
-        sketch_dir = self.train_dir
-        if not os.path.exists(sketch_dir):
-            print('The sketch directory {0:s} does not exist'.format(sketch_dir))
-            return None, None
+        print('Reading sketches from {0:s} to compute mean images:'.format(self.train_dir))
 
-        sketch_names = os.listdir(sketch_dir)
-        if len(sketch_names) < 1:
-            print('Found only {0:d} sketches in the sketch directory: {1:s}'.\
-                format(len(sketch_names), sketch_dir),
-                'What are you trying to do? Aborting for now.')
-            exit(0)    
-            
-        print('Reading sketches from {0:s}'.format(sketch_dir))
-        
-        X = np.empty([len(sketch_names), self.ht, self.wd], dtype='float32')
+        X = np.empty([len(self.sketch_list), self.ht, self.wd], dtype='float32')
         idx = 0
-        for sketch_name in sketch_names:
-            print(('\r{0:d}/{1:d} '.format(idx+1, len(sketch_names))), end='')
+        for sketch_name in self.sketch_list:
+            print(('\r{0:d}/{1:d} '.format(idx+1, len(self.sketch_list))), end='')
             
-            sketch_path = os.path.join(sketch_dir, sketch_name)
+            sketch_path = os.path.join(self.train_dir, sketch_name)
             sketch = cv2.imread(sketch_path)
             if sketch is not None:
                 sketch = cv2.cvtColor(sketch, cv2.COLOR_BGR2GRAY)
@@ -126,25 +138,17 @@ class Dataset():
         
             
     def get_num_train_sample(self):
-        return 2 * len(self.train_pairs)
+        return len(self.train_pairs)
 
     def get_num_val_sample(self):
-        return 2 * len(self.val_pairs)
+        return len(self.val_pairs)
 
     def _attach_pairs(self):
         sketch_dir = self.train_dir
-        num_augmented = self.num_augmented_sketches
-
-        if not os.path.exists(sketch_dir):
-            print('The sketch directory {0:s} does not exist'.format(sketch_dir))
-            return None, None, None, None
-
-        sketch_names = os.listdir(sketch_dir)
-        random.shuffle(sketch_names)  # Shuffle
-
+        num_additional = self.num_additional_sketches
+        sketch_names = self.sketch_list
         # sketch_names = sketch_names[-100:] # Enable for debugging purpose
         train_split = 100 - self.val_split
-
         # Divide between training and validation set
         num_sketches_train = int((len(sketch_names) * train_split) / 100)
 
@@ -153,11 +157,12 @@ class Dataset():
 
         # Create training pairs
         train_pairs = []
-        train_labels = [0, 1] * len(train_sketches)
+        train_labels = [0, 1] * len(train_sketches) * (1 + num_additional)
         for i, sketch_name in enumerate(train_sketches):
-            train_pairs.append([sketch_name, sketch_name])
-
-            for j in range(num_augmented):
+            for _ in range(1 + num_additional):
+                # Positive pair
+                train_pairs.append([sketch_name, sketch_name])
+                # Negative pair
                 rand_idx = i
                 while rand_idx == i:
                     rand_idx = random.randrange(0, len(train_sketches))
@@ -165,15 +170,15 @@ class Dataset():
 
         # Create validation pairs
         val_pairs = []
-        val_labels = [0, 1] * len(val_sketches)
+        val_labels = [0, 1] * len(val_sketches) * (1 + num_additional)
         for sketch_name in val_sketches:
-            val_pairs.append([sketch_name, sketch_name])
-
-            for j in range(num_augmented):
+            for j in range(1 + num_additional):
+                # Positive pair
+                val_pairs.append([sketch_name, sketch_name])
+                # Negative pair
                 rand_idx = i
                 while rand_idx == i:
                     rand_idx = random.randrange(0, len(val_sketches))
-
                 val_pairs.append([sketch_name, val_sketches[rand_idx]])
 
         return train_pairs, train_labels, val_pairs, val_labels
@@ -351,7 +356,7 @@ class Dataset():
             print('The sketch directory {0:s} does not exist'.format(sketch_dir))
             return
 
-        sketch_names = os.listdir(sketch_dir)
+        sketch_names = self.sketch_list
         random.shuffle(sketch_names)  # Shuffle
         wd = self.wd
         ht = self.ht
