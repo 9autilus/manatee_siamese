@@ -82,9 +82,8 @@ class SolverWrapper():
         num_val_sample = batch_size * np.ceil(self.imdb.get_num_val_sample() / float(batch_size)).astype('int32')
 
         # For debugging purpose
-        if 0:
+        if 1:
             self.imdb.validate_dataset(self.batch_size)
-            return # I would like to exit after printing debugging info
 
         # network definition
         input_dim = (1, self.imdb.ht, self.imdb.wd)
@@ -111,10 +110,11 @@ class SolverWrapper():
 
 def train_net(train_dir, weights, nb_epoch):
     dataset_args = {}
-    dataset_args['wd'] = 128 #256
-    dataset_args['ht'] = 64 #128
+    dataset_args['wd'] = 256
+    dataset_args['ht'] = 128
     dataset_args['train_dir'] = train_dir
     dataset_args['test_dir'] = None
+    dataset_args['discard_outline'] = False # Currently under experimentation
 
     train_args = {}
     train_args['batch_size'] = 32
@@ -122,7 +122,7 @@ def train_net(train_dir, weights, nb_epoch):
     train_args['use_augmentation'] = False #True
     # Params below only used if 'use_augmentation' is True
     # Number of additionally augmented sketches per manatee
-    train_args['num_additional_sketches'] = 1; 
+    train_args['num_additional_sketches'] = 0
     train_args['val_split'] = 30; # Percentage validation set
     train_args['height_shift_range'] = 0.01 #fraction
     train_args['width_shift_range'] = 0.01

@@ -6,6 +6,7 @@ import numpy as np
 import random
 
 from keras.preprocessing.image import transform_matrix_offset_center, apply_transform
+from scipy.ndimage.filters import gaussian_filter
 
 class Dataset():
     def __init__(self, args_dict):
@@ -21,20 +22,27 @@ class Dataset():
 
         if self.wd == 128 and self.ht == 64:
             self.mean_image_name = os.path.join('resources', 'mean_image_128x64.png')
+            self.outline_image_name = os.path.join('resources', 'outline_image_128x64.png')
             self.stddev_image_name = os.path.join('resources', 'stddev_image_128x64.png')
         elif self.wd == 256 and self.ht == 128:
             self.mean_image_name = os.path.join('resources', 'mean_image_256x128.png')
+            self.outline_image_name = os.path.join('resources', 'outline_image_256x128.png')
             self.stddev_image_name = os.path.join('resources', 'stddev_image_256x128.png')
         elif self.wd == 512 and self.ht == 256:
             self.mean_image_name = os.path.join('resources', 'mean_image_512x256.png')
+            self.outline_image_name = os.path.join('resources', 'outline_image_512x256.png')
             self.stddev_image_name = os.path.join('resources', 'stddev_image_512x256.png')
         else:
             print('Image dimension ht:{0:d} wd:{1:d} not supported.'\
                   .format(self.ht, self.wd))
 
-        self.mean_image, self.stddev_image = self.get_mean_sketch()
-
         self.ignore_list_file = os.path.join('resources', 'ignore_list.txt')
+
+        self.mean_image = None
+        self.outline_image = None
+        self.stddev_image = None
+
+        self.remove_outline = args_dict['discard_outline']
 
     def get_input_dim(self):
         return (1, self.ht, self.wd)
@@ -44,8 +52,17 @@ class Dataset():
         if sketch is not None:
             sketch = cv2.cvtColor(sketch, cv2.COLOR_BGR2GRAY)
             sketch = cv2.resize(sketch, (self.wd, self.ht))
-            # Zero mean and Unit variance
-            sketch = (sketch.astype('float32') - self.mean_image)/self.stddev_image
+            sketch = 255 - sketch # Make background zero by inverting
+            sketch = sketch.astype('float32')
+
+            # Some sketches a greyish background. Eliminate it.
+            # sketch[sketch < 30] = 0
+
+            if self.remove_outline:
+                self.outline_image = self.outline_image.astype('bool')
+                sketch = np.ma.filled(np.ma.masked_array(sketch, self.outline_image), 0)
+            # Bring the image data to -1 to +1 range
+            sketch = (sketch * 2)/255. - 1
             return sketch
         else:
             print('Unable to open ', sketch_path, ' Skipping.')
@@ -68,12 +85,18 @@ class Dataset():
 
         self.sketch_list = self._get_sketch_list()
 
+        self.mean_image, self.stddev_image = self.get_mean_sketch()
+        self.outline_image = self.get_outline_sketch()
+
         self.train_pairs, \
         self.train_labels, \
         self.val_pairs, \
         self.val_labels = self._attach_pairs()
 
         return
+
+    def prep_test(self):
+        self.mean_image, self.stddev_image = self.get_mean_sketch()
 
     def _get_sketch_list(self):
         sketch_list = os.listdir(self.train_dir)
@@ -100,11 +123,11 @@ class Dataset():
             mean_matrix = cv2.imread(self.mean_image_name, cv2.IMREAD_GRAYSCALE).astype('float32')
             stddev_matrix = cv2.imread(self.stddev_image_name, cv2.IMREAD_GRAYSCALE).astype('float32')
             # Either use IMREAD_GRAYSCALE while reading or convert sketch to Gryyscale after opening
-            
+
             if (mean_matrix is None) or (stddev_matrix is None):
                 print('Unable to open {0:s} or {1:s}'.format(self.mean_image_name, self.stddev_image_name))
             return mean_matrix, stddev_matrix
-        
+
         # Read all sketches and compute the mean and stddev matrices
         print('Reading sketches from {0:s} to compute mean images:'.format(self.train_dir))
 
@@ -118,25 +141,55 @@ class Dataset():
             if sketch is not None:
                 sketch = cv2.cvtColor(sketch, cv2.COLOR_BGR2GRAY)
                 sketch = cv2.resize(sketch, (self.wd, self.ht))
+                sketch = 255 - sketch  # Make background zero by inverting
                 X[idx] = sketch
             else:
                 print('Unable to open ', sketch_path, 
                 ' Skipping in mean calculation. Mean image not reliable')
             idx += 1
         print('Done.')
-        
+
         mean_matrix = np.mean(X, axis=0).astype('float32')
         stddev_matrix = X.std(axis=0).astype('float32')
-        
+
         # write to file for future usage
         print('Writing mean images : {0:s} {1:s} to disk'.format(self.mean_image_name, self.stddev_image_name), end='')
         cv2.imwrite(self.mean_image_name, mean_matrix.astype('uint8'))
         cv2.imwrite(self.stddev_image_name, stddev_matrix.astype('uint8'))
         print(' Done')
-        
+
         return mean_matrix, stddev_matrix
         
-            
+    def get_outline_sketch(self):
+        if os.path.exists(self.outline_image_name):
+            print('Reading outline image from disk: ', self.outline_image_name)
+            outline_matrix = cv2.imread(self.outline_image_name, cv2.IMREAD_GRAYSCALE).astype('float32')
+            # Either use IMREAD_GRAYSCALE while reading or convert sketch to Gryyscale after opening
+
+            if outline_matrix is None:
+                print('Unable to open {0:s} or {1:s}'.format(self.outline_image_name))
+            return outline_matrix
+
+        if not os.path.exists(self.mean_image_name):
+            print('Error: Mean image does not exist.')
+            return None
+
+        # If we average all images, we get outline
+        outline_matrix = cv2.imread(self.mean_image_name, cv2.IMREAD_GRAYSCALE).astype('float32')
+
+        # Smooth the image
+        outline_matrix = gaussian_filter(outline_matrix, 1.5, mode='constant', cval=0)
+        threshold = 20 # Based on experimentation
+        outline_matrix[outline_matrix < threshold] = 0
+        outline_matrix[outline_matrix > threshold] = 255
+
+        # write to file for future usage
+        print('Writing outline image : {0:s} to disk'.format(self.outline_image_name), end='')
+        cv2.imwrite(self.outline_image_name, outline_matrix.astype('uint8'))
+        print(' Done')
+        return outline_matrix
+
+
     def get_num_train_sample(self):
         return len(self.train_pairs)
 
@@ -299,51 +352,38 @@ class Dataset():
         return x
 
 
-    def _dump_sketch_pairs(self, sketch_pairs, phase, num_samples_to_dump):
+    def _dump_sketch_pairs(self, sketch_pairs, phase, num_samples_to_dump=None):
         sketch_dir = self.train_dir
 
-        num_pairs = int(num_samples_to_dump/2)
+        if num_samples_to_dump is None:
+            num_pairs = int(len(sketch_pairs) / 2)
+        else:
+            num_pairs = int(num_samples_to_dump/2)
         labels = np.zeros(num_pairs)  # Won't be used
         batch_size = 2
         wd = self.wd
         ht = self.ht
 
-        print(sketch_pairs)
         my_generator = self.get_batch(batch_size, phase)
         for i in range(0, num_pairs, 2):
             X, y = next(my_generator)
-            sketch1 = X[0][0]
-            sketch2 = X[0][1]
-            if self.use_augmentation is True:
-                # Scale the sketches to 0-255
-                sketch1 = sketch1 - np.min(sketch1)
-                sketch1 = sketch1 * (255. / np.max(sketch1))
-                sketch2 = sketch2 - np.min(sketch2)
-                sketch2 = sketch2 * (255. / np.max(sketch2))
-            else:
-                sketch1 = (sketch1 * self.stddev_image) + self.mean_image
-                sketch2 = (sketch2 * self.stddev_image) + self.mean_image
+            sketch1 = (1 + X[0][0]) * 255/2.
+            sketch2 = (1 + X[0][1]) * 255/2.
+            sketch1 = np.clip(sketch1, 0, 255)
+            sketch2 = np.clip(sketch2, 0, 255)
             sketch = np.concatenate((sketch1, sketch2), axis=1)
             sketch = sketch.reshape((2 * ht, wd))
             sketch = sketch.astype('uint8')
-            cv2.imwrite(phase + '_' + str(i) + '_0.jpg', sketch)
+            cv2.imwrite(os.path.join('temp', phase + '_' + str(i)) + '_0.jpg', sketch)
 
-            sketch1 = X[1][0]
-            sketch2 = X[1][1]
-            if self.use_augmentation is True:
-                # Scale the sketches to 0-255
-                sketch1 = sketch1 - np.min(sketch1)
-                sketch1 = sketch1 * (255. / np.max(sketch1))
-                sketch2 = sketch2 - np.min(sketch2)
-                sketch2 = sketch2 * (255. / np.max(sketch2))
-            else:
-                sketch1 = (sketch1 * self.stddev_image) + self.mean_image
-                sketch2 = (sketch2 * self.stddev_image) + self.mean_image
-
+            sketch1 = (1 + X[1][0]) * 255/2.
+            sketch2 = (1 + X[1][1]) * 255/2.
+            sketch1 = np.clip(sketch1, 0, 255)
+            sketch2 = np.clip(sketch2, 0, 255)
             sketch = np.concatenate((sketch1, sketch2), axis=1)
             sketch = sketch.reshape((2 * ht, wd))
             sketch = sketch.astype('uint8')
-            cv2.imwrite(phase + '_' + str(i) + '_1.jpg', sketch)
+            cv2.imwrite(os.path.join('temp', phase + '_' + str(i) + '_1.jpg'), sketch)
 
     '''
     Function to visualize how the sketches look after making them
@@ -366,9 +406,9 @@ class Dataset():
             sketch = self._get_sketch(os.path.join(sketch_dir, sketch_names[i]))
             # This sketch is zero-mean and unit-variance. In order to write
             # it on disk, we first need to bring it 0-255 range
-            sketch = sketch - np.min(sketch)
-            sketch = sketch * (255. / np.max(sketch))
-            cv2.imwrite( 'Aug_' + sketch_names[i], sketch)
+            sketch = (1 + sketch) * 255/2.
+            sketch = np.clip(sketch, 0, 255)
+            cv2.imwrite( os.path.join('temp', 'Aug_' + sketch_names[i]), sketch)
             if count >= num_sketches_to_dump:
                 break
 
@@ -399,16 +439,19 @@ class Dataset():
     def validate_dataset(self, batch_size):
         ## Dump sketch pairs to file as images stacked on top of one another
         if 0:
-            dump_train = dump_val = 50
+            print('Dumping sketch pairs for debugging....')
+            dump_train = dump_val = 500
             self._dump_sketch_pairs(self.train_pairs, 'train', dump_train)
             self._dump_sketch_pairs(self.val_pairs, 'val', dump_val)
             exit(0) # Usually I want to exit after dumping sketches
         if 0:
-            num_sketches_to_dump = 100
+            print('Dumping sketchs for debugging....')
+            num_sketches_to_dump = 10
             self._dump_sketces(num_sketches_to_dump)
             exit(0) # Usually I want to exit after dumping sketches
 
         if 0:
+            print('Testing generators for debugging.....')
             dump_train = dump_val = 10
             self._test_generators(batch_size, dump_train, dump_val)
 

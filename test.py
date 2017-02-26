@@ -18,7 +18,6 @@ class Test():
         # network definition
         self.net = create_network(self.input_dim)    
 
-        
     def test_single_source(self, model, X, ID):
         print('Computing rank-based accuracy... ')
         num_samples = X.shape[0]
@@ -180,8 +179,10 @@ def test_net(train_dir, test_dir, test_mode, weights):
     dataset_args['ht'] = 64
     dataset_args['train_dir'] = train_dir
     dataset_args['test_dir'] = test_dir
+    dataset_args['discard_outline'] = False # Currently under experimentation
 
     imdb = Dataset(dataset_args)
+    imdb.prep_test()
 
     sw = Test(imdb, weights, train_dir, test_dir)
     

@@ -17,13 +17,13 @@ def create_network(input_dim):
     '''Base network to be shared (eq. to feature extraction).
     '''
     model = Sequential()
-    model.add(Convolution2D(48, 10, 10, activation='relu', border_mode='valid', input_shape=input_dim))
+    model.add(Convolution2D(48, 5, 5, activation='relu', border_mode='valid', input_shape=input_dim))
     model.add(MaxPooling2D(pool_size=(2, 2), strides=None, border_mode='same'))
-    model.add(Convolution2D(128, 7, 7, activation='relu', border_mode='valid'))
+    model.add(Convolution2D(128, 5, 5, activation='relu', border_mode='valid'))
     model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2), border_mode='same'))    
-    model.add(Convolution2D(128, 4, 4, activation='relu', border_mode='valid'))
+    model.add(Convolution2D(128, 5, 5, activation='relu', border_mode='valid'))
     model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2), border_mode='same'))     
-    model.add(Convolution2D(256, 4, 4, activation='relu', border_mode='valid'))
+    model.add(Convolution2D(256, 5, 5, activation='relu', border_mode='valid'))
     model.add(Flatten())
     model.add(Dense(4096, activation='sigmoid'))
 
