@@ -2,8 +2,8 @@ from __future__ import print_function
 import numpy as np
 
 def eval_score_table(score_table, ranks, row_IDs, col_IDs):  
-    row_IDs = np.array(row_IDs)
-    col_IDs = np.array(col_IDs)
+    row_IDs = np.array([x.split('_')[0] for x in row_IDs])
+    col_IDs = np.array([x.split('_')[0] for x in col_IDs])
 
     num_col = col_IDs.shape[0]
     num_row = row_IDs.shape[0]

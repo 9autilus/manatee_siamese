@@ -13,7 +13,7 @@ class Test():
         self.weights_file = weights
         self.input_dim = self.imdb.get_input_dim()
         self.test_dir = test_dir
-        self.ranks = sorted([1, 5, 10, 20])
+        self.ranks = sorted([1, 5, 10, 20, 50, 100, 200])
         
         # network definition
         self.net = create_network(self.input_dim)    
