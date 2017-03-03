@@ -36,9 +36,9 @@ def create_network(input_dim):
     processed_b = model(input_b)
 
     abs_diff = Lambda(get_abs_diff, output_shape = abs_diff_output_shape)([processed_a, processed_b])
-    flattened_weighted_distance = Dense(1, activation = 'sigmoid')(abs_diff)
+    score = Dense(1, activation = 'sigmoid')(abs_diff) #Dissimilarity score
 
-    model = Model(input=[input_a, input_b], output = flattened_weighted_distance)     
+    model = Model(input=[input_a, input_b], output=score)
 
     # Optimizer
     rms = RMSprop()

@@ -20,29 +20,38 @@ class Dataset():
         self.val_pairs = None
         self.val_labels = None
 
-        if self.wd == 128 and self.ht == 64:
-            self.mean_image_name = os.path.join('resources', 'mean_image_128x64.png')
-            self.outline_image_name = os.path.join('resources', 'outline_image_128x64.png')
-            self.stddev_image_name = os.path.join('resources', 'stddev_image_128x64.png')
-        elif self.wd == 256 and self.ht == 128:
-            self.mean_image_name = os.path.join('resources', 'mean_image_256x128.png')
-            self.outline_image_name = os.path.join('resources', 'outline_image_256x128.png')
-            self.stddev_image_name = os.path.join('resources', 'stddev_image_256x128.png')
-        elif self.wd == 512 and self.ht == 256:
-            self.mean_image_name = os.path.join('resources', 'mean_image_512x256.png')
-            self.outline_image_name = os.path.join('resources', 'outline_image_512x256.png')
-            self.stddev_image_name = os.path.join('resources', 'stddev_image_512x256.png')
+        self.remove_outline = args_dict['discard_outline']
+
+        if self.remove_outline:
+            if self.wd == 128 and self.ht == 64:
+                self.mean_image_name = os.path.join('resources', 'mean_image_128x64.png')
+                self.outline_image_name = os.path.join('resources', 'outline_image_128x64.png')
+                self.stddev_image_name = os.path.join('resources', 'stddev_image_128x64.png')
+            elif self.wd == 256 and self.ht == 128:
+                self.mean_image_name = os.path.join('resources', 'mean_image_256x128.png')
+                self.outline_image_name = os.path.join('resources', 'outline_image_256x128.png')
+                self.stddev_image_name = os.path.join('resources', 'stddev_image_256x128.png')
+            elif self.wd == 512 and self.ht == 256:
+                self.mean_image_name = os.path.join('resources', 'mean_image_512x256.png')
+                self.outline_image_name = os.path.join('resources', 'outline_image_512x256.png')
+                self.stddev_image_name = os.path.join('resources', 'stddev_image_512x256.png')
+            else:
+                print('Image dimension ht:{0:d} wd:{1:d} not supported.'\
+                      .format(self.ht, self.wd))
         else:
-            print('Image dimension ht:{0:d} wd:{1:d} not supported.'\
-                  .format(self.ht, self.wd))
+            self.mean_image_name = ''
+            self.stddev_image_name = ''
+            self.outline_image_name = ''
+            self.mean_image = None
+            self.outline_image = None
+            self.stddev_image = None
 
         self.ignore_list_file = os.path.join('resources', 'ignore_list.txt')
 
-        self.mean_image = None
-        self.outline_image = None
-        self.stddev_image = None
-
-        self.remove_outline = args_dict['discard_outline']
+        self._print_dataset_config()
+        
+    def _print_dataset_config(self):
+        return
 
     def get_input_dim(self):
         return (1, self.ht, self.wd)
@@ -85,18 +94,23 @@ class Dataset():
 
         self.sketch_list = self._get_sketch_list()
 
-        self.mean_image, self.stddev_image = self.get_mean_sketch()
-        self.outline_image = self.get_outline_sketch()
+        if self.remove_outline:
+            self.mean_image, self.stddev_image = self.get_mean_sketch()
+            self.outline_image = self.get_outline_sketch()
 
         self.train_pairs, \
         self.train_labels, \
         self.val_pairs, \
         self.val_labels = self._attach_pairs()
 
+        self._print_train_config()
+        
+    def _print_train_config(self):
         return
 
-    def prep_test(self):
-        self.mean_image, self.stddev_image = self.get_mean_sketch()
+    def prep_test(self, test_args):
+        if self.remove_outline:
+            self.mean_image, self.stddev_image = self.get_mean_sketch()
 
     def _get_sketch_list(self):
         sketch_list = os.listdir(self.train_dir)
@@ -473,10 +487,14 @@ class Dataset():
             print('Found only {0:d} sketches in the sketch directory: {1:s}'.\
                 format(len(sketch_names), sketch_dir),
                 'What are you trying to do? Aborting for now.')
-            exit(0)    
-            
-        print('Reading sketches from {0:s}'.format(sketch_dir))
+            exit(0)
+
+        # Preparing IDs
         ID = [x.split('.')[0] for x in sketch_names] # sketch names w/o extension
+        ID = [x.split('_')[0] for x in ID] # Removing '_' from filenames
+
+        # Preparing sketch data
+        print('Reading sketches from {0:s}'.format(sketch_dir))
         X = np.empty([len(sketch_names), self.ht, self.wd], dtype='float32')
         for idx, sketch_name in enumerate(sketch_names):
             print(('\r{0:d}/{1:d} '.format(idx+1, len(sketch_names))), end='')
@@ -488,4 +506,11 @@ class Dataset():
         X = X.reshape((X.shape[0], 1, X.shape[1], X.shape[2]))
         return X, ID
         
-      
+def set_dataset_args(train_dir, test_dir):
+    dataset_args = {}
+    dataset_args['wd'] = 128
+    dataset_args['ht'] = 64
+    dataset_args['train_dir'] = train_dir
+    dataset_args['test_dir'] = test_dir
+    dataset_args['discard_outline'] = False # Currently under experimentation
+    return dataset_args

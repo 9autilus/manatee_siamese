@@ -4,6 +4,9 @@ from dataset import Dataset
 from keras.callbacks import ModelCheckpoint
 import numpy as np
 import random
+import os
+
+from dataset import set_dataset_args
 
 
 class SolverWrapper():
@@ -107,23 +110,16 @@ class SolverWrapper():
         self._dump_history(hist.history, True, 'history.log')
         print('Training complete. Saved model as: ', self.weights_file)
 
-
-def train_net(train_dir, weights, nb_epoch):
-    dataset_args = {}
-    dataset_args['wd'] = 256
-    dataset_args['ht'] = 128
-    dataset_args['train_dir'] = train_dir
-    dataset_args['test_dir'] = None
-    dataset_args['discard_outline'] = False # Currently under experimentation
+def set_train_config(train_dir):
+    dataset_args = set_dataset_args(train_dir, test_dir=None)
 
     train_args = {}
     train_args['batch_size'] = 32
-    
-    train_args['use_augmentation'] = False #True
+    train_args['use_augmentation'] = True
     # Params below only used if 'use_augmentation' is True
     # Number of additionally augmented sketches per manatee
-    train_args['num_additional_sketches'] = 0
-    train_args['val_split'] = 30; # Percentage validation set
+    train_args['num_additional_sketches'] = 2
+    train_args['val_split'] = 20 # Percentage validation set
     train_args['height_shift_range'] = 0.01 #fraction
     train_args['width_shift_range'] = 0.01
     train_args['rotation_range'] = 5.
@@ -131,6 +127,11 @@ def train_net(train_dir, weights, nb_epoch):
     train_args['zoom_range'] = [0.95, 1.02]
     train_args['fill_mode'] = 'nearest' # 'constant', 'nearest', 'reflect', 'wrap'
     train_args['cval'] = 1 # Only used if fill_mode is 'constant'
+    return train_args
+
+
+def train_net(train_dir, weights, nb_epoch):
+    dataset_args, train_args = set_train_config(train_dir)
 
     # Open and initialize dataset for training
     imdb = Dataset(dataset_args)
