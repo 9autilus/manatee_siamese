@@ -25,7 +25,7 @@ def eval_score_table(score_table, ranks, row_IDs, col_IDs):
         num_matches = 0
         for i in range(num_row):
             sorted_row_ids = col_IDs[sorted_idx[i]]
-            if row_IDs[i] in sorted_row_ids[-rank:]:
+            if row_IDs[i] in sorted_row_ids[:rank]:
                 num_matches += 1
         accuracy[r] = (100 * num_matches)/float(num_row)
         
