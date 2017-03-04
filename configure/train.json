@@ -1,0 +1,15 @@
+{
+    "batch_size": 32, 
+    "use_augmentation": true, 
+    "num_additional_sketches": 2, 
+    "val_split": 20, 
+    "height_shift_range": 0.01, 
+    "width_shift_range": 0.01, 
+    "rotation_range": 5.0, 
+    "shear_range": 0.01, 
+    "zoom_range": [0.95, 1.02], 
+    "fill_mode": "nearest", 
+    "cval": 1
+}    
+
+    

@@ -5,14 +5,12 @@ from keras.callbacks import ModelCheckpoint
 import numpy as np
 import random
 import os
-
-from dataset import set_dataset_args
-
+import json
 
 class SolverWrapper():
-    def __init__(self, imdb, weights, nb_epoch, batch_size, train_dir):
+    def __init__(self, imdb, model_file, nb_epoch, batch_size, train_dir):
         self.imdb = imdb
-        self.weights_file = weights
+        self.model_file = model_file
         self.nb_epoch = nb_epoch
         self.input_dim = self.imdb.get_input_dim()
         self.train_dir = train_dir
@@ -93,7 +91,7 @@ class SolverWrapper():
         model = create_network(input_dim)
 
         # Create check point callback
-        checkpointer = ModelCheckpoint(filepath=self.weights_file,
+        checkpointer = ModelCheckpoint(filepath=self.model_file,
                                        monitor='val_loss', verbose=1, save_best_only=True)
 
         ## Reduce sample-count for debugging
@@ -108,36 +106,24 @@ class SolverWrapper():
                                    callbacks=[checkpointer])
 
         self._dump_history(hist.history, True, 'history.log')
-        print('Training complete. Saved model as: ', self.weights_file)
+        print('Training complete. Saved model as: ', self.model_file)
 
-def set_train_config(train_dir):
-    dataset_args = set_dataset_args(train_dir, test_dir=None)
+def set_train_config(common_cfg_file, train_cfg_file):
+    with open(common_cfg_file) as f: dataset_config = json.load(f)
+    with open(train_cfg_file) as f: train_config = json.load(f)
 
-    train_args = {}
-    train_args['batch_size'] = 32
-    train_args['use_augmentation'] = True
-    # Params below only used if 'use_augmentation' is True
-    # Number of additionally augmented sketches per manatee
-    train_args['num_additional_sketches'] = 2
-    train_args['val_split'] = 20 # Percentage validation set
-    train_args['height_shift_range'] = 0.01 #fraction
-    train_args['width_shift_range'] = 0.01
-    train_args['rotation_range'] = 5.
-    train_args['shear_range'] = np.pi * 0.01
-    train_args['zoom_range'] = [0.95, 1.02]
-    train_args['fill_mode'] = 'nearest' # 'constant', 'nearest', 'reflect', 'wrap'
-    train_args['cval'] = 1 # Only used if fill_mode is 'constant'
-    return train_args
+    train_config['shear_range'] = np.pi * train_config['shear_range']
 
+    return dataset_config, train_config
 
-def train_net(train_dir, weights, nb_epoch):
-    dataset_args, train_args = set_train_config(train_dir)
+def train_net(common_cfg_file, train_cfg_file, model_file, nb_epoch):
+    dataset_args, train_args = set_train_config(common_cfg_file, train_cfg_file)
 
     # Open and initialize dataset for training
     imdb = Dataset(dataset_args)
     imdb.prep_training(train_args)
 
-    sw = SolverWrapper(imdb, weights, nb_epoch, train_args['batch_size'], train_dir)
+    sw = SolverWrapper(imdb, model_file, nb_epoch, train_args['batch_size'], dataset_args['train_dir'])
 
     sw.train_model()
    

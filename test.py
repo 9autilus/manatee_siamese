@@ -2,28 +2,23 @@ from __future__ import print_function
 import sys #for flushing to stdout
 import numpy as np
 import cv2
-
-from siamese_model import create_network
 from keras.models import load_model
+import json
+
 from dataset import Dataset
 from eval import eval_score_table
 
-from dataset import set_dataset_args
-
 class Test():
-    def __init__(self, imdb, weights, train_dir, test_dir):
+    def __init__(self, imdb, model_file, train_dir, test_dir):
         self.imdb = imdb
-        self.weights_file = weights
+        self.model_file = model_file
         self.input_dim = self.imdb.get_input_dim()
         self.test_dir = test_dir
         self.ranks = sorted([1, 5, 10, 20, 50, 100, 200])
         
-        # network definition
-        #self.net = create_network(self.input_dim) # Disable since saved model contains definition too
-
-        # Use pre-trained weights
-        print('Reading weights from disk: ', weights)
-        self.net = load_model(weights)
+        # Use pre-trained model_file
+        print('Reading model from disk: ', model_file)
+        self.net = load_model(model_file)
 
     def test_single_source(self, model, X, ID):
         print('Computing rank-based accuracy... ')
@@ -179,29 +174,29 @@ def debug_sketches(X1, X2, ht, wd) :
         file_name = 'test_' + str(i) + '_' + str(wd) + 'x' + str(ht)+ '.png'
         cv2.imwrite(file_name, sketch)
 
-def set_test_config(train_dir, test_dir):
-    dataset_args = set_dataset_args(train_dir, test_dir)
+def set_test_config(common_cfg_file, test_cfg_file):
+    with open(common_cfg_file) as f: dataset_config = json.load(f)
+    with open(test_cfg_file) as f: test_config = json.load(f)
 
-    test_args = {}
-    return dataset_args, test_args
+    return dataset_config, test_config
 
-def test_net(train_dir, test_dir, test_mode, weights):
-    dataset_args, test_args = set_test_config(train_dir, test_dir)
+def test_net(common_cfg_file, test_cfg_file, test_mode, model_file):
+    dataset_args, test_args = set_test_config(common_cfg_file, test_cfg_file)
 
     imdb = Dataset(dataset_args)
     imdb.prep_test(test_args)
 
-    sw = Test(imdb, weights, train_dir, test_dir)
+    sw = Test(imdb, model_file, dataset_args['train_dir'], dataset_args['test_dir'])
 
     if test_mode == 0:
         # searching for test_dir sketches inside test_dir
-        X, ID = sw.imdb.load_sketches(test_dir)
+        X, ID = sw.imdb.load_sketches(dataset_args['test_dir'])
         # sw.test_single_source(sw.net, X, ID)
         sw.perform_testing(sw.net, X, ID)
     elif test_mode == 1:
         # searching for test_dir sketches inside train_dir
-        X1, ID1 = sw.imdb.load_sketches(test_dir)
-        X2, ID2 = sw.imdb.load_sketches(train_dir)
+        X1, ID1 = sw.imdb.load_sketches(dataset_args['test_dir'])
+        X2, ID2 = sw.imdb.load_sketches(dataset_args['train_dir'])
         sw.perform_testing(sw.net, X1, ID1, X2, ID2)
 
     return

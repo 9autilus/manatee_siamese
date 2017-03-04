@@ -78,6 +78,8 @@ class Dataset():
             return None
 
     def prep_training(self, train_args):
+
+
         self.val_split = train_args['val_split']
         self.use_augmentation = train_args['use_augmentation']
         self.num_additional_sketches = train_args['num_additional_sketches']
@@ -505,12 +507,3 @@ class Dataset():
         
         X = X.reshape((X.shape[0], 1, X.shape[1], X.shape[2]))
         return X, ID
-        
-def set_dataset_args(train_dir, test_dir):
-    dataset_args = {}
-    dataset_args['wd'] = 128
-    dataset_args['ht'] = 64
-    dataset_args['train_dir'] = train_dir
-    dataset_args['test_dir'] = test_dir
-    dataset_args['discard_outline'] = False # Currently under experimentation
-    return dataset_args

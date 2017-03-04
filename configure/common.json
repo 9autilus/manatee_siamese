@@ -1,0 +1,7 @@
+{
+    "wd": 256, 
+    "ht": 128, 
+    "train_dir": "path\\to\\sketches_train",
+    "test_dir": "path\\to\\sketches_test", 
+    "discard_outline": false
+}

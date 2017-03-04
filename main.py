@@ -18,9 +18,6 @@ import argparse
 from train import train_net
 from test import test_net
 
-train_dir = 'path/to/sketches_train'
-test_dir  = 'path/to/sketches_test'
-
 default_store_model = 'model.h5'
 
 # For printing complete numpy array while debugging
@@ -29,7 +26,7 @@ default_store_model = 'model.h5'
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("--phase", help="train/test")
-    parser.add_argument("--weights", help="weights to be stored/read")
+    parser.add_argument("--model", help="model to be stored/read")
     parser.add_argument("--test_mode", help="0:test vs test, 1: test vs train+test 2: test2 vs train+test")
     parser.add_argument("--epochs", help="#epochs while training")
     args = parser.parse_args()
@@ -51,15 +48,19 @@ def parse_arguments():
             parser.print_help()
             parser.error('For testing, test_mode must be 0,1 or 2.')
 
-    if not args.weights:
-        print('No weights specified. using default: ', default_store_model)
-        args.weights = default_store_model
+    if not args.model:
+        print('No model specified. using default: ', default_store_model)
+        args.model = default_store_model
     return args
 
 if __name__ == '__main__':
     args = parse_arguments()
 
+    common_cfg_file = os.path.join('configure', 'common.json')
+    train_cfg_file = os.path.join('configure', 'train.json')
+    test_cfg_file = os.path.join('configure', 'test.json')
+
     if args.phase == 'train':
-        train_net(train_dir, args.weights, args.epochs)
+        train_net(common_cfg_file, train_cfg_file, args.model, args.epochs)
     else:
-        test_net(train_dir, test_dir, args.test_mode, args.weights)
+        test_net(common_cfg_file, test_cfg_file, args.test_mode, args.model)
