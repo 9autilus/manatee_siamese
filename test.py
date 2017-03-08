@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 from keras.models import load_model
 import json
+import csv
 
 from dataset import Dataset
 from eval import eval_score_table
@@ -67,12 +68,44 @@ class Test():
             score_table[i][i] /= 2.
             
         eval_score_table(score_table, ranks, ID, ID)        
-        
+
+
+    def _dump_score_table(self, score_table, row_IDs, col_IDs):
+        score_table = np.array(score_table)
+
+
+        dump = []
+        dump += [['', ':'] + col_IDs]
+        for row in range(score_table.shape[0]):
+            dump += [[row_IDs[row], ':'] + score_table[row].tolist()]
+        with open('score_table.csv', 'w', newline='') as f:
+            wr = csv.writer(f, delimiter=',')
+            for row in dump:
+                wr.writerow(row)
+
+        sorted_idx = np.argsort(score_table, axis=1)
+        sorted_IDs = []
+        sorted_scores = []
+        col_IDs_np = np.array(col_IDs)
+        for row in range(score_table.shape[0]):
+            sorted_IDs += [[row_IDs[row], ':'] + col_IDs_np[sorted_idx[row]].tolist()]
+            sorted_scores += [[row_IDs[row], ':'] + score_table[row, sorted_idx[row]].tolist()]
+
+        with open('score_table_sorted_IDs.csv', 'w', newline='') as f:
+            wr = csv.writer(f, delimiter=',')
+            for row in sorted_IDs:
+                wr.writerow(row)
+
+        with open('score_table_sorted_scores.csv', 'w', newline='') as f:
+            wr = csv.writer(f, delimiter=',')
+            for row in sorted_scores:
+                wr.writerow(row)
+
     def perform_testing(self, model, X1, ID1, X2=None, ID2=None):
         test_single_source = (X2 is None) or (ID2 is None)
 
         print('Computing rank-based accuracy... ')
-        print('Tesging single source: ', test_single_source)
+        print('Testing single source: ', test_single_source)
         num_rows = X1.shape[0]
         
         if test_single_source:
@@ -127,8 +160,8 @@ class Test():
             '''
             No shortcuts about permutations are made. All sketches in X1 are compared with
             all sketches in X2.
-            '''        
-            batch = np.empty([batch_size, 2] + [i for i in X1[0].shape]);
+            '''
+            batch = np.empty([batch_size, 2] + [i for i in X1[0].shape])
             pair_count = 0; counter = 0
             for i in range(num_rows):
                 for j in range(num_cols):
@@ -158,7 +191,7 @@ class Test():
         # Parse score table and generate accuracy metrics
         eval_score_table(score_table, ranks, ID1, ID2)        
         
-
+        self._dump_score_table(score_table, ID1, ID2)
         
 
     

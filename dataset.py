@@ -47,6 +47,7 @@ class Dataset():
             self.stddev_image = None
 
         self.ignore_list_file = os.path.join('resources', 'ignore_list.txt')
+        self.limited_search_space = []
 
         self._print_dataset_config()
         
@@ -78,8 +79,6 @@ class Dataset():
             return None
 
     def prep_training(self, train_args):
-
-
         self.val_split = train_args['val_split']
         self.use_augmentation = train_args['use_augmentation']
         self.num_additional_sketches = train_args['num_additional_sketches']
@@ -431,8 +430,8 @@ class Dataset():
     def _compare_labels(self, gen, pairs, labels, num_batches, batch_size):
         num_matches = 0
         for batch_id in range(num_batches):
-            [x_l, x_r], y = next(gen);
-            print('\rbatch_id: {0:d}/{1:d}'.format(batch_id, num_batches), end='');
+            [x_l, x_r], y = next(gen)
+            print('\rbatch_id: {0:d}/{1:d}'.format(batch_id, num_batches), end='')
             for i in range(batch_size):
                 num_matches += ((labels[i] == 0) == np.array_equal(x_l[i], x_r[i]))
         print('\nLabels match: {0:.1f}%'.format(100 * num_matches / float(num_batches * batch_size)))
@@ -494,6 +493,21 @@ class Dataset():
         # Preparing IDs
         ID = [x.split('.')[0] for x in sketch_names] # sketch names w/o extension
         ID = [x.split('_')[0] for x in ID] # Removing '_' from filenames
+
+        # Limit search space to the correct sketches
+        if 1:
+            if not self.limited_search_space: # Save sketchs from test_set
+                lss = []
+                for i in range(len(sketch_names)):
+                    lss.append(ID[i] + '.' + sketch_names[i].split('.')[1])
+                self.limited_search_space = lss
+            else:
+                sketch_names = self.limited_search_space
+                num_limited_sketches = 0
+                if num_limited_sketches != 0: # For debugging only
+                    sketch_names = sketch_names[:num_limited_sketches]
+                ID = [x.split('.')[0] for x in sketch_names]  # sketch names w/o extension
+                ID = [x.split('_')[0] for x in ID]  # Removing '_' from filenames
 
         # Preparing sketch data
         print('Reading sketches from {0:s}'.format(sketch_dir))
