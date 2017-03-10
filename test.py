@@ -16,6 +16,8 @@ class Test():
         self.input_dim = self.imdb.get_input_dim()
         self.test_dir = test_dir
         self.ranks = sorted([1, 5, 10, 20, 50, 100, 200])
+        self.dump_score_table = True # For debugging
+        self.limit_search_space = True
         
         # Use pre-trained model_file
         print('Reading model from disk: ', model_file)
@@ -71,14 +73,21 @@ class Test():
 
 
     def _dump_score_table(self, score_table, row_IDs, col_IDs):
+        import sys
+
+        if sys.version_info[0] == 2:  # Not named on 2.6
+            access = 'wb'
+            kwargs = {}
+        else:
+            access = 'wt'
+            kwargs = {'newline':''}    
+    
         score_table = np.array(score_table)
-
-
         dump = []
         dump += [['', ':'] + col_IDs]
         for row in range(score_table.shape[0]):
             dump += [[row_IDs[row], ':'] + score_table[row].tolist()]
-        with open('score_table.csv', 'w', newline='') as f:
+        with open('score_table.csv', access, **kwargs) as f:
             wr = csv.writer(f, delimiter=',')
             for row in dump:
                 wr.writerow(row)
@@ -91,12 +100,12 @@ class Test():
             sorted_IDs += [[row_IDs[row], ':'] + col_IDs_np[sorted_idx[row]].tolist()]
             sorted_scores += [[row_IDs[row], ':'] + score_table[row, sorted_idx[row]].tolist()]
 
-        with open('score_table_sorted_IDs.csv', 'w', newline='') as f:
+        with open('score_table_sorted_IDs.csv', access, **kwargs) as f:
             wr = csv.writer(f, delimiter=',')
             for row in sorted_IDs:
                 wr.writerow(row)
 
-        with open('score_table_sorted_scores.csv', 'w', newline='') as f:
+        with open('score_table_sorted_scores.csv', access, **kwargs) as f:
             wr = csv.writer(f, delimiter=',')
             for row in sorted_scores:
                 wr.writerow(row)
@@ -191,7 +200,8 @@ class Test():
         # Parse score table and generate accuracy metrics
         eval_score_table(score_table, ranks, ID1, ID2)        
         
-        self._dump_score_table(score_table, ID1, ID2)
+        if self.dump_score_table:
+            self._dump_score_table(score_table, ID1, ID2)
         
 
     
@@ -228,8 +238,8 @@ def test_net(common_cfg_file, test_cfg_file, test_mode, model_file):
         sw.perform_testing(sw.net, X, ID)
     elif test_mode == 1:
         # searching for test_dir sketches inside train_dir
-        X1, ID1 = sw.imdb.load_sketches(dataset_args['test_dir'])
-        X2, ID2 = sw.imdb.load_sketches(dataset_args['train_dir'])
+        X1, ID1 = sw.imdb.load_sketches(dataset_args['test_dir'], sw.limit_search_space)
+        X2, ID2 = sw.imdb.load_sketches(dataset_args['train_dir'], sw.limit_search_space)
         sw.perform_testing(sw.net, X1, ID1, X2, ID2)
 
     return

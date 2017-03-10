@@ -4,6 +4,7 @@ import os
 import cv2
 import numpy as np
 import random
+import glob
 
 from keras.preprocessing.image import transform_matrix_offset_center, apply_transform
 from scipy.ndimage.filters import gaussian_filter
@@ -475,9 +476,9 @@ class Dataset():
     Used by the testing module.
     May have to replace it if the test set becomes too large to fit in memory.
     '''
-    def load_sketches(self, sketch_dir):
+    def load_sketches(self, sketch_dir, limit_search_space):
         if not os.path.exists(sketch_dir):
-            print('The sketch directory {0:s} does not exist'.format(sketch_dir))
+            print('Error: The sketch directory {0:s} does not exist'.format(sketch_dir))
             return None, None
 
         sketch_names = os.listdir(sketch_dir)
@@ -485,7 +486,7 @@ class Dataset():
         #sketch_names = sketch_names[-100:] # Enable for debugging purpose
         
         if len(sketch_names) < 1:
-            print('Found only {0:d} sketches in the sketch directory: {1:s}'.\
+            print('Error: Found only {0:d} sketches in the sketch directory: {1:s}'.\
                 format(len(sketch_names), sketch_dir),
                 'What are you trying to do? Aborting for now.')
             exit(0)
@@ -495,29 +496,54 @@ class Dataset():
         ID = [x.split('_')[0] for x in ID] # Removing '_' from filenames
 
         # Limit search space to the correct sketches
-        if 1:
-            if not self.limited_search_space: # Save sketchs from test_set
+        if limit_search_space:
+            # Save sketch list from test_set
+            if not self.limited_search_space: 
                 lss = []
                 for i in range(len(sketch_names)):
                     lss.append(ID[i] + '.' + sketch_names[i].split('.')[1])
                 self.limited_search_space = lss
+                
+                # Preparing sketch data
+                print('Reading sketches from {0:s}'.format(sketch_dir))
+                X = np.empty([len(sketch_names), self.ht, self.wd], dtype='float32')
+                for idx, sketch_name in enumerate(sketch_names):
+                    print(('\r{0:d}/{1:d} '.format(idx+1, len(sketch_names))), end='')
+                    sketch = self._get_sketch(os.path.join(sketch_dir, sketch_name))
+                    if sketch is not None:
+                        X[idx] = sketch
+                print('Done.')                
             else:
+                # Uded the sketch list from test_set
                 sketch_names = self.limited_search_space
-                num_limited_sketches = 0
-                if num_limited_sketches != 0: # For debugging only
+                num_limited_sketches = 0 # In case want to test functionality for debugging
+                if num_limited_sketches != 0:
                     sketch_names = sketch_names[:num_limited_sketches]
                 ID = [x.split('.')[0] for x in sketch_names]  # sketch names w/o extension
                 ID = [x.split('_')[0] for x in ID]  # Removing '_' from filenames
-
-        # Preparing sketch data
-        print('Reading sketches from {0:s}'.format(sketch_dir))
-        X = np.empty([len(sketch_names), self.ht, self.wd], dtype='float32')
-        for idx, sketch_name in enumerate(sketch_names):
-            print(('\r{0:d}/{1:d} '.format(idx+1, len(sketch_names))), end='')
-            sketch = self._get_sketch(os.path.join(sketch_dir, sketch_name))
-            if sketch is not None:
-                X[idx] = sketch
-        print('Done.')
+                ID = list(set(ID)) # Removing duplicates since test ID may have >1 sketches per manatee e.g. _A, _B 
+                
+                # Preparing sketch data
+                print('Reading sketches from {0:s}'.format(sketch_dir))
+                X = np.empty([len(ID), self.ht, self.wd], dtype='float32')
+                for idx, id in enumerate(ID):
+                    print(('\r{0:d}/{1:d} '.format(idx+1, len(ID))), end='')
+                    # Workaround: Some IDs have different extension in test and train dir
+                    sketch_with_path = glob.glob(os.path.join(sketch_dir, id + '.*'))[0]
+                    sketch = self._get_sketch(sketch_with_path)
+                    if sketch is not None:
+                        X[idx] = sketch
+                print('Done.')
+        else:
+            # Preparing sketch data
+            print('Reading sketches from {0:s}'.format(sketch_dir))
+            X = np.empty([len(sketch_names), self.ht, self.wd], dtype='float32')
+            for idx, sketch_name in enumerate(sketch_names):
+                print(('\r{0:d}/{1:d} '.format(idx+1, len(sketch_names))), end='')
+                sketch = self._get_sketch(os.path.join(sketch_dir, sketch_name))
+                if sketch is not None:
+                    X[idx] = sketch
+            print('Done.')
         
         X = X.reshape((X.shape[0], 1, X.shape[1], X.shape[2]))
         return X, ID
