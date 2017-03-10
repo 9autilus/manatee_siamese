@@ -1,5 +1,5 @@
 from keras.models import Sequential, Model
-from keras.layers import Input, Convolution2D, MaxPooling2D, Dense, Flatten, Lambda
+from keras.layers import Input, Convolution2D, MaxPooling2D, Dense, Flatten, Lambda, Merge
 from keras.optimizers import RMSprop
 from keras import backend as K
 
@@ -8,10 +8,19 @@ def get_abs_diff(vects):
     val = K.abs(x - y)
     return val
 
-
 def abs_diff_output_shape(shapes):
     shape1, shape2 = shapes
     return (shape1)
+
+def my_concat(vects):
+    x, y = vects
+    c = K.concatenate([x, y], axis=1)
+    return c
+
+def my_concat_output_shape(shapes):
+    shape1, shape2 = shapes
+    new_shape = (shape1[0], 2 * shape1[1])
+    return new_shape
 
 def create_network(input_dim):
     '''Base network to be shared (eq. to feature extraction).
@@ -35,13 +44,22 @@ def create_network(input_dim):
     processed_a = model(input_a)
     processed_b = model(input_b)
 
-    abs_diff = Lambda(get_abs_diff, output_shape = abs_diff_output_shape)([processed_a, processed_b])
-    score = Dense(1, activation = 'sigmoid')(abs_diff) #Dissimilarity score
-
-    model = Model(input=[input_a, input_b], output=score)
+    if 1:
+        # Concat Layer
+        temp = Lambda(my_concat, output_shape=my_concat_output_shape)([processed_a, processed_b])
+        score = Dense(1, activation = 'sigmoid')(temp) #Dissimilarity score
+        model = Model(input=[input_a, input_b], output=score)
+    else:
+        # Absolute layer
+        temp = Lambda(get_abs_diff, output_shape = abs_diff_output_shape)([processed_a, processed_b])
+        score = Dense(1, activation = 'sigmoid')(temp) #Dissimilarity score
+        model = Model(input=[input_a, input_b], output=score)
 
     # Optimizer
     rms = RMSprop()
-    model.compile(loss='binary_crossentropy', optimizer=rms, metrics=['accuracy'])    
-    
+    model.compile(loss='binary_crossentropy', optimizer=rms, metrics=['accuracy'])
+
+    # from keras.utils.visualize_util import plot
+    # plot(model, to_file='model.png')
+
     return model
