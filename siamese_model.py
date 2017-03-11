@@ -14,13 +14,11 @@ def abs_diff_output_shape(shapes):
 
 def my_concat(vects):
     x, y = vects
-    c = K.concatenate([x, y], axis=1)
-    return c
+    return K.concatenate([x, y], axis=1)
 
 def my_concat_output_shape(shapes):
     shape1, shape2 = shapes
-    new_shape = (shape1[0], 2 * shape1[1])
-    return new_shape
+    return (shape1[0], 2 * shape1[1])
 
 def create_network(input_dim):
     '''Base network to be shared (eq. to feature extraction).
@@ -34,7 +32,7 @@ def create_network(input_dim):
     model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2), border_mode='same'))     
     model.add(Convolution2D(256, 5, 5, activation='relu', border_mode='valid'))
     model.add(Flatten())
-    model.add(Dense(4096, activation='sigmoid'))
+    model.add(Dense(4096, activation='relu'))
 
     input_a = Input(shape=(input_dim))
     input_b = Input(shape=(input_dim))
@@ -47,7 +45,9 @@ def create_network(input_dim):
     if 1:
         # Concat Layer
         temp = Lambda(my_concat, output_shape=my_concat_output_shape)([processed_a, processed_b])
-        score = Dense(1, activation = 'sigmoid')(temp) #Dissimilarity score
+        score = Dense(512, activation = 'relu')(temp) #Dissimilarity score
+        score = Dense(128, activation = 'relu')(temp)
+        score = Dense(1, activation = 'sigmoid')(score)
         model = Model(input=[input_a, input_b], output=score)
     else:
         # Absolute layer
