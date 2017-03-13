@@ -8,6 +8,7 @@ import glob
 
 from keras.preprocessing.image import transform_matrix_offset_center, apply_transform
 from scipy.ndimage.filters import gaussian_filter
+from keras import backend as K
 
 class Dataset():
     def __init__(self, args_dict):
@@ -56,7 +57,10 @@ class Dataset():
         return
 
     def get_input_dim(self):
-        return (1, self.ht, self.wd)
+        if K.image_dim_ordering() == 'tf':
+            return (self.ht, self.wd, 1)
+        else:
+            return (1, self.ht, self.wd)
 
     def _get_sketch(self, sketch_path):
         sketch = cv2.imread(sketch_path)
@@ -273,8 +277,12 @@ class Dataset():
         ht = self.ht
         wd = self.wd
 
-        X_l = np.zeros((batch_size, 1, ht, wd))
-        X_r = np.zeros((batch_size, 1, ht, wd))
+        if K.image_dim_ordering() == 'tf':
+            img_shape = (ht, wd, 1)
+        else:
+            img_shape = (1, ht, wd)
+        X_l = np.zeros((batch_size,) + img_shape)
+        X_r = np.zeros((batch_size,) + img_shape)
         y = np.array([0, 1] * int(batch_size / 2))
 
         src_idx = 0
@@ -282,8 +290,8 @@ class Dataset():
         while True:
             sketch1_name = pairs[src_idx][0]
             sketch2_name = pairs[src_idx + 1][1]
-            sketch1 = self._get_sketch(os.path.join(sketch_dir, sketch1_name)).reshape(1, ht, wd)
-            sketch2 = self._get_sketch(os.path.join(sketch_dir, sketch2_name)).reshape(1, ht, wd)
+            sketch1 = self._get_sketch(os.path.join(sketch_dir, sketch1_name)).reshape(img_shape)
+            sketch2 = self._get_sketch(os.path.join(sketch_dir, sketch2_name)).reshape(img_shape)
 
             if self.use_augmentation is True:
                 # Positive pair

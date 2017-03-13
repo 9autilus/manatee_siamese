@@ -87,9 +87,8 @@ class SolverWrapper():
             self.imdb.validate_dataset(self.batch_size)
 
         # network definition
-        input_dim = (1, self.imdb.ht, self.imdb.wd)
-        model = create_network(input_dim)
-
+        model = create_network(self.input_dim)
+        
         # Create check point callback
         checkpointer = ModelCheckpoint(filepath=self.model_file,
                                        monitor='val_loss', verbose=1, save_best_only=True)

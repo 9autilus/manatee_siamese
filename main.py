@@ -14,6 +14,10 @@ random.seed(seed)
 import tensorflow as tf
 tf.set_random_seed(seed)    # Seed Tensor Flow
 
+# Use theano dimension ordering
+from keras import backend as K
+K.set_image_dim_ordering('th')
+
 import argparse
 from train import train_net
 from test import test_net
