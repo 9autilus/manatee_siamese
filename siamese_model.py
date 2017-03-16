@@ -48,7 +48,7 @@ def create_network(input_dim):
     model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2), border_mode='same'))     
     model.add(Convolution2D(256, 5, 5, activation='relu', border_mode='valid'))
     model.add(Flatten())
-    model.add(Dense(4096, activation='relu'))
+    model.add(Dense(1024, activation='sigmoid'))
 
     input_a = Input(shape=(input_dim))
     input_b = Input(shape=(input_dim))
@@ -72,6 +72,7 @@ def create_network(input_dim):
         model = Model(input=[input_a, input_b], output=score)
     else: # Default: Absolute layer
         temp = Lambda(get_abs_diff, output_shape=abs_diff_output_shape)([processed_a, processed_b])
+        temp = Dense(1024, activation='sigmoid')(temp)
         score = Dense(1, activation='sigmoid')(temp)  # Dissimilarity score
         model = Model(input=[input_a, input_b], output=score)
 
