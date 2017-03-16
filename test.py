@@ -8,6 +8,7 @@ import csv
 
 from dataset import Dataset
 from eval import eval_score_table
+from siamese_model import contrastive_loss
 
 class Test():
     def __init__(self, imdb, model_file, train_dir, test_dir):
@@ -21,6 +22,7 @@ class Test():
         
         # Use pre-trained model_file
         print('Reading model from disk: ', model_file)
+        # self.net = load_model(model_file, custom_objects={'contrastive_loss':contrastive_loss})
         self.net = load_model(model_file)
 
     def test_single_source(self, model, X, ID):

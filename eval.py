@@ -31,7 +31,7 @@ def eval_score_table(score_table, ranks, row_IDs, col_IDs):
         
     print('Rank based accuracy:')
     for i in range(len(ranks)):
-        print('Top {0:3d} : {1:2.2f}%'.format(ranks[i], accuracy[i]))
+        print('Top {0:3d} : {1:.1f}%'.format(ranks[i], accuracy[i]))
         
     #for i in range(num_row):
     #    print(row_IDs[i], 'Scores ')
