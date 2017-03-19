@@ -1,24 +1,55 @@
 from __future__ import print_function
 from siamese_model import create_network
 from dataset import Dataset
-from keras.callbacks import ModelCheckpoint
+from keras.callbacks import ModelCheckpoint, Callback
 import numpy as np
 import random
 import os
 import json
 
+seed = 1337
+
+class Reset_Random(Callback):
+    # def on_train_begin(self, logs={}):
+    #     return
+    # 
+    # def on_train_end(self, logs={}):
+    #     return
+ 
+    def on_epoch_begin(self, epoch, logs={}):
+        np.random.seed(seed)  
+        return
+ 
+    # def on_epoch_end(self, epoch, logs={}):
+    #     return
+    # 
+    # def on_batch_begin(self, batch, logs={}):
+    #     return
+    # 
+    # def on_batch_end(self, batch, logs={}):
+    #     self.losses.append(logs.get('loss'))
+    #     return   
+
 class SolverWrapper():
-    def __init__(self, imdb, model_file, nb_epoch, batch_size, train_dir):
+    def __init__(self, imdb, model_file, nb_epoch, batch_size, train_dir,
+                 retrain, initial_epoch):
         self.imdb = imdb
         self.model_file = model_file
         self.nb_epoch = nb_epoch
         self.input_dim = self.imdb.get_input_dim()
         self.train_dir = train_dir
         self.batch_size = batch_size
+        self.retrain = retrain
+        self.initial_epoch = initial_epoch
         
         # network definition
-        self.net = create_network(self.input_dim)
-
+        if self.retrain:
+            # Use pre-trained model_file
+            print('Reading model from disk: ', model_file)
+            self.net = load_model(model_file)
+        else:
+            self.net = create_network(self.input_dim)
+            self.initial_epoch = 0
 
     def create_training_pairs(self, x):
         '''Positive and negative pair creation.
@@ -74,6 +105,7 @@ class SolverWrapper():
 
         print('Dumped history to file: {0:s}'.format(log_file_name))
 
+        
     def train_model(self):
         batch_size = self.batch_size
 
@@ -92,11 +124,12 @@ class SolverWrapper():
         # Create check point callback
         checkpointer = ModelCheckpoint(filepath=self.model_file,
                                        monitor='val_loss', verbose=1, save_best_only=True)
+                                       
+        # reset_random = Reset_Random()
 
         ## Reduce sample-count for debugging
         # num_train_sample = 2* self.batch_size
         # num_val_sample = self.batch_size
-
         hist = model.fit_generator(self.imdb.get_batch(batch_size, phase='train'),
                                    samples_per_epoch=num_train_sample,
                                    nb_epoch=self.nb_epoch,
@@ -115,14 +148,22 @@ def set_train_config(common_cfg_file, train_cfg_file):
 
     return dataset_config, train_config
 
-def train_net(common_cfg_file, train_cfg_file, model_file, nb_epoch):
+def train_net(
+        common_cfg_file,
+        train_cfg_file,
+        model_file,
+        nb_epoch,
+        retrain,
+        initial_epoch):
     dataset_args, train_args = set_train_config(common_cfg_file, train_cfg_file)
 
     # Open and initialize dataset for training
     imdb = Dataset(dataset_args)
     imdb.prep_training(train_args)
 
-    sw = SolverWrapper(imdb, model_file, nb_epoch, train_args['batch_size'], dataset_args['train_dir'])
+    sw = SolverWrapper(
+        imdb, model_file, nb_epoch, train_args['batch_size'],
+       dataset_args['train_dir'], retrain, initial_epoch)
 
     sw.train_model()
    

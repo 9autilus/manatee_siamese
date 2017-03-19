@@ -77,7 +77,7 @@ def create_network(input_dim):
         model = Model(input=[input_a, input_b], output=score)
 
     # Optimizer
-    rms = RMSprop()
+    rms = RMSprop(lr=0.001, decay=0.1)
 
     if 0: # Contrastive loss
         model.compile(loss=contrastive_loss, optimizer=rms, metrics=['accuracy'])

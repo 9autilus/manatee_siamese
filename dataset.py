@@ -21,6 +21,9 @@ class Dataset():
         self.train_labels = None
         self.val_pairs = None
         self.val_labels = None
+        
+        self.positive_sample = 0 # Match
+        self.negative_sample = 1 # Missmatch
 
         self.remove_outline = args_dict['discard_outline']
 
@@ -48,7 +51,7 @@ class Dataset():
             self.outline_image = None
             self.stddev_image = None
 
-        self.ignore_list_file = os.path.join('resources', 'ignore_list.txt')
+        self.training_ignore_list_file = os.path.join('resources', 'training_ignore_list.txt')
         self.limited_search_space = []
 
         self._print_dataset_config()
@@ -127,7 +130,7 @@ class Dataset():
             exit(0)
 
         # Get list of sketches to ignore
-        ignore_list = open(self.ignore_list_file, 'r').read().splitlines()
+        ignore_list = open(self.training_ignore_list_file, 'r').read().splitlines()
         ignore_list = [i for i in ignore_list if i.isspace() is False and i.startswith('#') is False]
         # Remove the sketches that are present in ignore_list
         sketch_list = [i for i in sketch_list if i not in ignore_list]
@@ -230,8 +233,9 @@ class Dataset():
 
         # Create training pairs
         train_pairs = []
-        train_labels = [0, 1] * len(train_sketches) * (1 + num_additional)
+        train_labels = [self.positive_sample, self.negative_sample] * len(train_sketches) * (1 + num_additional)
         for i, sketch_name in enumerate(train_sketches):
+            # num_additional adds 2 pairs per sketch
             for _ in range(1 + num_additional):
                 # Positive pair
                 train_pairs.append([sketch_name, sketch_name])
@@ -243,9 +247,10 @@ class Dataset():
 
         # Create validation pairs
         val_pairs = []
-        val_labels = [0, 1] * len(val_sketches) * (1 + num_additional)
-        for sketch_name in val_sketches:
-            for j in range(1 + num_additional):
+        val_labels = [self.positive_sample, self.negative_sample] * len(val_sketches) * (1 + num_additional)
+        for i, sketch_name in enumerate(val_sketches):
+            # num_additional adds 2 pairs per sketch        
+            for _ in range(1 + num_additional):
                 # Positive pair
                 val_pairs.append([sketch_name, sketch_name])
                 # Negative pair
@@ -283,7 +288,7 @@ class Dataset():
             img_shape = (1, ht, wd)
         X_l = np.zeros((batch_size,) + img_shape)
         X_r = np.zeros((batch_size,) + img_shape)
-        y = np.array([0, 1] * int(batch_size / 2))
+        y = np.array([self.positive_sample, self.negative_sample] * int(batch_size / 2))
 
         src_idx = 0
         dst_idx = 0

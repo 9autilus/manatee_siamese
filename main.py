@@ -33,8 +33,10 @@ def parse_arguments():
     parser.add_argument("--model", help="model to be stored/read")
     parser.add_argument("--test_mode", help="0:test vs test, 1: test vs train+test 2: test2 vs train+test")
     parser.add_argument("--epochs", help="#epochs while training")
-    args = parser.parse_args()
+    parser.add_argument("--retrain", help="Continue training existing model")
+    parser.add_argument("--initial_epoch", help="Starting epoch. Used when --retrain")
 
+    args = parser.parse_args()
     if not args.phase:
         parser.print_help()
         parser.error('Must specify phase (train/test)')
@@ -46,6 +48,16 @@ def parse_arguments():
         if args.test_mode:
             print('Ignoring test_mode parameter for training.')
         args.epochs = int(args.epochs)
+
+        if args.retrain:
+            if not args.model:
+                parser.print_help()
+                parser.error('Must specify --model with --retrain')
+            if not args.initial_epoch:
+                parser.print_help()
+                parser.error('Must specify --initial_epoch with --retrain')
+            else:
+                args.initial_epoch = int(args.initial_epoch)
     else:
         args.test_mode = int(args.test_mode)
         if args.test_mode not in range(0, 3):
@@ -65,6 +77,8 @@ if __name__ == '__main__':
     test_cfg_file = os.path.join('configure', 'test.json')
 
     if args.phase == 'train':
-        train_net(common_cfg_file, train_cfg_file, args.model, args.epochs)
+        train_net(
+            common_cfg_file, train_cfg_file, args.model, args.epochs,\
+            args.retrain, args.initial_epoch)
     else:
         test_net(common_cfg_file, test_cfg_file, args.test_mode, args.model)
