@@ -1,11 +1,6 @@
 from __future__ import print_function
 import os
 
-# Limit execution on certain GPU/GPUs
-gpu_id = '0'  # Comma seperated string of GPU IDs to be used e.g. '0, 1, 2, 3'
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
-
 seed = 1337  # for reproducibility
 import numpy as np
 np.random.seed(seed)        # Seed Numpy
@@ -35,6 +30,8 @@ def parse_arguments():
     parser.add_argument("--epochs", help="#epochs while training")
     parser.add_argument("--retrain", help="Continue training existing model")
     parser.add_argument("--initial_epoch", help="Starting epoch. Used when --retrain")
+    parser.add_argument("--gpu", help="list of GPUs, e.g. [0,1,3]")
+
 
     args = parser.parse_args()
     if not args.phase:
@@ -67,10 +64,19 @@ def parse_arguments():
     if not args.model:
         print('No model specified. using default: ', default_store_model)
         args.model = default_store_model
+
+    if not args.gpu:
+        args.gpu = '0'
+
     return args
 
 if __name__ == '__main__':
     args = parse_arguments()
+
+    # Limit execution on certain GPU/GPUs
+    gpu_id = args.gpu  # Comma separated string of GPU IDs to be used e.g. '0, 1, 2, 3'
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
 
     common_cfg_file = os.path.join('configure', 'common.json')
     train_cfg_file = os.path.join('configure', 'train.json')
