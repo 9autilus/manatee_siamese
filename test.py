@@ -5,6 +5,7 @@ import cv2
 from keras.models import load_model
 import json
 import csv
+import os
 
 from dataset import Dataset
 from eval import eval_score_table
@@ -206,7 +207,6 @@ class Test():
             self._dump_score_table(score_table, ID1, ID2)
         
 
-    
 def debug_sketches(X1, X2, ht, wd) :
     for i in range(X1.shape[0]):
         print(np.min(X1[i]), np.mean(X1[i]), np.max(X1[i]))
@@ -218,6 +218,26 @@ def debug_sketches(X1, X2, ht, wd) :
         sketch = sketch.astype('uint8')
         file_name = 'test_' + str(i) + '_' + str(wd) + 'x' + str(ht)+ '.png'
         cv2.imwrite(file_name, sketch)
+
+
+def dump_train_test_sketch_pairs(X1, ID1, X2, ID2):
+    for i, id in enumerate(ID1):
+        stripped_id = id.split('.')[0].split('_')[0]
+        if stripped_id in ID2:
+            sketch1 = X1[i]
+            sketch2 = X2[ID2.index(stripped_id)]
+            sketch1 = (1 + sketch1) * 255/2.
+            sketch2 = (1 + sketch2) * 255/2.
+            sketch1 = 255 - np.clip(sketch1, 0, 255)
+            sketch2 = 255 - np.clip(sketch2, 0, 255)
+            sketch = np.concatenate((sketch2, sketch1), axis=1) # Place Train-sketch on top of test-sketch
+            # sketch.shape is (1, ht, wd) at this point
+            sketch = sketch.reshape(sketch.shape[1], sketch.shape[1]) # make shape (ht, wd)
+            sketch = sketch.astype('uint8')
+            cv2.imwrite(os.path.join('temp', id + '_pair.jpg'), sketch)
+        else:
+            print("Warning: Stripped ID: {0:s} not found in test set. Skipping pair dump.".format(stripped_id))
+    exit(0)
 
 def set_test_config(common_cfg_file, test_cfg_file):
     with open(common_cfg_file) as f: dataset_config = json.load(f)
@@ -242,6 +262,6 @@ def test_net(common_cfg_file, test_cfg_file, test_mode, model_file):
         # searching for test_dir sketches inside train_dir
         X1, ID1 = sw.imdb.load_sketches(dataset_args['test_dir'], sw.limit_search_space)
         X2, ID2 = sw.imdb.load_sketches(dataset_args['train_dir'], sw.limit_search_space)
+        # dump_train_test_sketch_pairs(X1, ID1, X2, ID2)
         sw.perform_testing(sw.net, X1, ID1, X2, ID2)
-
     return
