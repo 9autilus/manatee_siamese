@@ -50,10 +50,7 @@ def parse_arguments():
             if not args.model:
                 parser.print_help()
                 parser.error('Must specify --model with --retrain')
-            if not args.initial_epoch:
-                parser.print_help()
-                parser.error('Must specify --initial_epoch with --retrain')
-            else:
+            if args.initial_epoch:
                 args.initial_epoch = int(args.initial_epoch)
     else:
         args.test_mode = int(args.test_mode)
