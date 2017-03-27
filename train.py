@@ -2,6 +2,7 @@ from __future__ import print_function
 from siamese_model import create_network
 from dataset import Dataset
 from keras.callbacks import ModelCheckpoint, Callback
+from keras.models import load_model
 import numpy as np
 import random
 import os
@@ -140,10 +141,11 @@ class SolverWrapper():
         self._dump_history(hist.history, True, 'history.log')
         print('Training complete. Saved model as: ', self.model_file)
 
-def set_train_config(common_cfg_file, train_cfg_file):
+def set_train_config(common_cfg_file, train_cfg_file, train_mode):
     with open(common_cfg_file) as f: dataset_config = json.load(f)
     with open(train_cfg_file) as f: train_config = json.load(f)
 
+    train_config['train_mode'] = train_mode
     train_config['shear_range'] = np.pi * train_config['shear_range']
 
     return dataset_config, train_config
@@ -151,11 +153,13 @@ def set_train_config(common_cfg_file, train_cfg_file):
 def train_net(
         common_cfg_file,
         train_cfg_file,
+        train_mode,
         model_file,
         nb_epoch,
         retrain,
         initial_epoch):
-    dataset_args, train_args = set_train_config(common_cfg_file, train_cfg_file)
+    dataset_args, train_args = set_train_config(
+        common_cfg_file, train_cfg_file, train_mode)
 
     # Open and initialize dataset for training
     imdb = Dataset(dataset_args)

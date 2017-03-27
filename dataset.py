@@ -22,8 +22,8 @@ class Dataset():
         self.val_pairs = None
         self.val_labels = None
         
-        self.positive_sample = 0 # Match
-        self.negative_sample = 1 # Missmatch
+        self.positive_label = 0 # Match
+        self.negative_label = 1 # Mismatch
 
         self.remove_outline = args_dict['discard_outline']
 
@@ -87,6 +87,8 @@ class Dataset():
             return None
 
     def prep_training(self, train_args):
+        self.train_mode = train_args['train_mode']
+
         self.val_split = train_args['val_split']
         self.use_augmentation = train_args['use_augmentation']
         self.num_additional_sketches = train_args['num_additional_sketches']
@@ -98,19 +100,24 @@ class Dataset():
         self.fill_mode = train_args['fill_mode']
         self.cval = train_args['cval']
 
-        if not self.use_augmentation:
+        if self.train_mode == 0:
+            if not self.use_augmentation:
+                self.num_additional_sketches = 0
+
+            self.sketch_list = self._get_sketch_list()
+
+            if self.remove_outline:
+                self.mean_image, self.stddev_image = self.get_mean_sketch()
+                self.outline_image = self.get_outline_sketch()
+
+            self.train_pairs, \
+            self.train_labels, \
+            self.val_pairs, \
+            self.val_labels = self._attach_pairs()
+        else: # train_mode == 1
+            # Force turn-off augmentation
+            self.use_augmentation = False
             self.num_additional_sketches = 0
-
-        self.sketch_list = self._get_sketch_list()
-
-        if self.remove_outline:
-            self.mean_image, self.stddev_image = self.get_mean_sketch()
-            self.outline_image = self.get_outline_sketch()
-
-        self.train_pairs, \
-        self.train_labels, \
-        self.val_pairs, \
-        self.val_labels = self._attach_pairs()
 
         self._print_train_config()
         
@@ -233,7 +240,7 @@ class Dataset():
 
         # Create training pairs
         train_pairs = []
-        train_labels = [self.positive_sample, self.negative_sample] * len(train_sketches) * (1 + num_additional)
+        train_labels = [self.positive_label, self.negative_label] * len(train_sketches) * (1 + num_additional)
         for i, sketch_name in enumerate(train_sketches):
             # num_additional adds 2 pairs per sketch
             for _ in range(1 + num_additional):
@@ -247,7 +254,7 @@ class Dataset():
 
         # Create validation pairs
         val_pairs = []
-        val_labels = [self.positive_sample, self.negative_sample] * len(val_sketches) * (1 + num_additional)
+        val_labels = [self.positive_label, self.negative_label] * len(val_sketches) * (1 + num_additional)
         for i, sketch_name in enumerate(val_sketches):
             # num_additional adds 2 pairs per sketch        
             for _ in range(1 + num_additional):
@@ -288,7 +295,7 @@ class Dataset():
             img_shape = (1, ht, wd)
         X_l = np.zeros((batch_size,) + img_shape)
         X_r = np.zeros((batch_size,) + img_shape)
-        y = np.array([self.positive_sample, self.negative_sample] * int(batch_size / 2))
+        y = np.array([self.positive_label, self.negative_label] * int(batch_size / 2))
 
         src_idx = 0
         dst_idx = 0
@@ -317,6 +324,83 @@ class Dataset():
             dst_idx += 2
 
             if src_idx >= len(pairs):
+                src_idx = 0
+
+            if dst_idx >= batch_size:
+                dst_idx = 0
+                yield [X_l, X_r], y
+
+    def get_batch_train_2(self, batch_size, phase):
+        # batch size must be a multiple of 4
+        if batch_size % 4 != 0:
+            print('Error: batch size must be multiple of 4')
+            exit(0)
+
+        if phase == 'train':
+            self.sketch_list = os.listdir(self.test_dir)
+            random.shuffle(self.sketch_list)
+        else:
+            if not self.sketch_list:
+                print("Error: self.sketch_list must be initialized for validation batch generator")
+                exit(0)
+
+        train_split = 100 - self.val_split
+        # Divide between training and validation set
+        num_sketches_train = int((len(self.sketch_list) * train_split) / 100)
+
+        if phase == 'train':
+            sketches = self.sketch_list[:num_sketches_train]
+        else: # phase == 'val'
+            sketches = self.sketch_list[num_sketches_train:]
+
+        sketches_ids = [i.split('.')[0].split('_')[0] for i in sketches]
+
+        ht = self.ht
+        wd = self.wd
+
+        if K.image_dim_ordering() == 'tf':
+            img_shape = (ht, wd, 1)
+        else:
+            img_shape = (1, ht, wd)
+        X_l = np.zeros((batch_size,) + img_shape)
+        X_r = np.zeros((batch_size,) + img_shape)
+        y = np.array([self.positive_label, self.negative_label] * int(batch_size / 2))
+
+        src_idx = 0
+        dst_idx = 0
+        while True:
+            sketch = self._get_sketch(os.path.join(self.test_dir, sketches[src_idx])).reshape(img_shape)
+
+            # get positive match
+            sketch_id = sketches_ids[src_idx]
+            sketch_with_path = glob.glob(os.path.join(self.train_dir, sketch_id + '.*'))[0]
+            sketch_positive = self._get_sketch(sketch_with_path).reshape(img_shape)
+
+            # Get negative match
+            rand_idx = src_idx
+            while rand_idx == src_idx:
+                rand_idx = random.randrange(0, len(sketches_ids))
+            sketch_id = sketches_ids[rand_idx]
+            sketch_with_path = glob.glob(os.path.join(self.train_dir, sketch_id + '.*'))[0]
+            sketch_negative = self._get_sketch(sketch_with_path).reshape(img_shape)
+
+            # Positive pair
+            X_l[dst_idx] = sketch
+            X_r[dst_idx] = sketch_positive
+            # Negative pair
+            X_l[dst_idx + 1] = sketch
+            X_r[dst_idx + 1] = sketch_negative
+            # Flipped Positive pair
+            X_l[dst_idx] = sketch_positive
+            X_r[dst_idx] = sketch
+            # Flipped Negative pair
+            X_l[dst_idx + 1] = sketch_negative
+            X_r[dst_idx + 1] = sketch
+
+            src_idx += 1
+            dst_idx += 4
+
+            if src_idx >= len(sketches_ids):
                 src_idx = 0
 
             if dst_idx >= batch_size:
