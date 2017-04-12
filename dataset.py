@@ -76,6 +76,11 @@ class Dataset():
             # Some sketches a greyish background. Eliminate it.
             # sketch[sketch < 30] = 0
 
+            # Apply blur on image
+            if 0:
+                sigma = 1.
+                sketch = cv2.GaussianBlur(sketch, (5, 5), sigmaX=sigma, sigmaY=sigma)
+
             if self.remove_outline:
                 self.outline_image = self.outline_image.astype('bool')
                 sketch = np.ma.filled(np.ma.masked_array(sketch, self.outline_image), 0)
