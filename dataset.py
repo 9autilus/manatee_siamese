@@ -325,6 +325,24 @@ class Dataset():
                 X_l[dst_idx + 1] = sketch1
                 X_r[dst_idx + 1] = sketch2
 
+            # Add random Gaussian noise while training
+            if 1:
+                mean = 0.
+                s = 0.1
+                # Positive pair
+                sketch_shape_2d = [sketch1.shape[1], sketch1.shape[2]]
+                sketch_shape_3d = sketch1.shape
+                rand = np.zeros(sketch_shape_2d)
+                cv2.randn(rand, mean, s)
+                X_l[dst_idx] += rand.reshape(sketch_shape_3d)
+                cv2.randn(rand, mean, s)
+                X_r[dst_idx] += rand.reshape(sketch_shape_3d)
+                # Negative pair
+                cv2.randn(rand, mean, s)
+                X_l[dst_idx + 1] += rand.reshape(sketch_shape_3d)
+                cv2.randn(rand, mean, s)
+                X_r[dst_idx + 1] += rand.reshape(sketch_shape_3d)
+
             src_idx += 2
             dst_idx += 2
 

@@ -19,7 +19,7 @@ class Test():
         self.test_dir = test_dir
         self.ranks = sorted([1, 5, 10, 20, 50, 100, 200])
         self.dump_score_table = True # For debugging
-        self.limit_search_space = True
+        self.limit_search_space = 0 #True
         
         # Use pre-trained model_file
         print('Reading model from disk: ', model_file)
@@ -39,11 +39,11 @@ class Test():
             size *= i
         
         # To tackle memory constraints, process pairs in small sized batches
-        batch_size = 128;    # Num pairs in a batch
+        batch_size = 128   # Num pairs in a batch
         scores = np.empty(num_pairs).astype('float32')         # List to store scores of ALL pairs
         
         pairs = np.empty([batch_size, 2] + [i for i in X[0].shape]);
-        pair_count = 0; counter = 0;
+        pair_count = 0; counter = 0
         for i in range(num_pairs):
             for j in range(i, num_samples):
                 pairs[pair_count] = np.array([[X[i], X[j]]])
@@ -255,7 +255,7 @@ def test_net(common_cfg_file, test_cfg_file, test_mode, model_file):
 
     if test_mode == 0:
         # searching for test_dir sketches inside test_dir
-        X, ID = sw.imdb.load_sketches(dataset_args['test_dir'])
+        X, ID = sw.imdb.load_sketches(dataset_args['test_dir'], sw.limit_search_space)
         # sw.test_single_source(sw.net, X, ID)
         sw.perform_testing(sw.net, X, ID)
     elif test_mode == 1:

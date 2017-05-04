@@ -8,6 +8,7 @@ import random               # Seed random
 random.seed(seed)
 import tensorflow as tf
 tf.set_random_seed(seed)    # Seed Tensor Flow
+tf.python.control_flow_ops = tf
 
 # Use theano dimension ordering
 from keras import backend as K
@@ -27,7 +28,7 @@ def parse_arguments():
     parser.add_argument("--phase", help="train/test")
     parser.add_argument("--model", help="model to be stored/read")
     parser.add_argument("--train_mode", help="0:train w/ just train, 1: train w/ train+test")
-    parser.add_argument("--test_mode", help="0:test vs test, 1: test vs train+test 2: test2 vs train+test")
+    parser.add_argument("--test_mode", help="0:test vs test, 1: test vs train+test")
     parser.add_argument("--epochs", help="#epochs while training")
     parser.add_argument("--retrain", help="Continue training existing model")
     parser.add_argument("--initial_epoch", help="Starting epoch. Used when --retrain")
@@ -46,7 +47,10 @@ def parse_arguments():
         if args.test_mode:
             print('Ignoring test_mode parameter for training.')
         args.epochs = int(args.epochs)
-        args.train_mode = int(args.train_mode)
+        if args.train_mode:
+            args.train_mode = int(args.train_mode)
+        else:
+            args.train_mode = 0
 
         if args.retrain:
             if not args.model:
@@ -86,7 +90,7 @@ if __name__ == '__main__':
 
     if args.phase == 'train':
         train_net(
-            common_cfg_file, train_cfg_file, args.train_mode, args.model, args.epochs,\
+            common_cfg_file, train_cfg_file, args.train_mode, args.model, args.epochs,
             args.retrain, args.initial_epoch)
     else:
         test_net(common_cfg_file, test_cfg_file, args.test_mode, args.model)
